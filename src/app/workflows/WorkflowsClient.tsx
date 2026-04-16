@@ -5,6 +5,8 @@ import { useState, useTransition } from "react";
 import type { WorkflowRecord } from "@/lib/workflows";
 import type { ProjectRecord } from "@/lib/projects";
 import type { AnthropicAuthStatus } from "@/lib/anthropic-auth";
+// Type alias kept for import stability — the shape changed but the name
+// was what lots of components used.
 
 const MODELS = [
   { value: "claude-sonnet-4-6", label: "Sonnet 4.6 (recommended)" },
@@ -30,12 +32,18 @@ export default function WorkflowsClient({
     <div className="space-y-4">
       {!anthropic.configured && (
         <div className="bg-yellow-900/40 border border-yellow-800 rounded-md p-3 text-sm">
-          <div className="font-semibold text-yellow-200">ANTHROPIC_API_KEY is not configured</div>
+          <div className="font-semibold text-yellow-200">Claude CLI not available</div>
           <div className="text-yellow-300 mt-1">
-            Set the env var on the DCM controller and restart before creating a workflow. The
-            Claude Agent SDK requires it — claude.ai login is not supported for third-party apps.
+            {anthropic.error ??
+              "Install Claude Code and run `claude login`, then retry."}{" "}
+            DCM drives workflow agents via <code className="bg-zinc-950 px-1 rounded">claude --print</code>, which uses your normal Claude Code sign-in.
           </div>
         </div>
+      )}
+      {anthropic.configured && anthropic.cli_version && (
+        <p className="text-xs text-zinc-500">
+          Using Claude CLI: <span className="font-mono">{anthropic.cli_version}</span>
+        </p>
       )}
       {anthropic.configured && enabledProjects.length === 0 && (
         <div className="bg-zinc-900 border border-zinc-800 rounded-md p-3 text-sm text-zinc-400">

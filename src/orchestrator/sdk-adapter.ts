@@ -1,19 +1,26 @@
-// Thin adapter around @anthropic-ai/claude-agent-sdk `query()`. The real
-// implementation is swapped out for a mock in tests via setSdkQueryForTesting.
-// Only this file imports the SDK; everything else consumes the narrow
-// `runAgent` function in session.ts.
+// Adapter around the "run one turn of a Claude agent" primitive.
+// Implementation: drives the local `claude` CLI (`claude --print
+// --output-format stream-json`) so auth uses the operator's existing
+// Claude Code sign-in — no ANTHROPIC_API_KEY required.
+//
+// Tests replace this with a fixture stream via setSdkQueryForTesting.
+// File name retained from when this wrapped the Agent SDK; the public
+// surface (SdkQueryFn, getSdkQuery, setSdkQueryForTesting) is what every
+// caller consumes.
 
-import { query as realQuery } from "@anthropic-ai/claude-agent-sdk";
+import { claudeCliQuery, type CliQueryOptions, type StreamMessage } from "./cli-adapter";
 
-export type SdkQueryFn = typeof realQuery;
+export type SdkQueryFn = (args: CliQueryOptions) => AsyncIterable<StreamMessage>;
 
-let _queryImpl: SdkQueryFn = realQuery;
+const defaultImpl: SdkQueryFn = (args) => claudeCliQuery(args);
+
+let _queryImpl: SdkQueryFn = defaultImpl;
 
 export function getSdkQuery(): SdkQueryFn {
   return _queryImpl;
 }
 
-// Test hook — pass null to restore the real SDK.
+// Test hook — pass null to restore the CLI-backed implementation.
 export function setSdkQueryForTesting(fn: SdkQueryFn | null): void {
-  _queryImpl = fn ?? realQuery;
+  _queryImpl = fn ?? defaultImpl;
 }

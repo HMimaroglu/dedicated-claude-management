@@ -43,13 +43,18 @@ export async function POST(req: Request) {
   const auth = await requireAuth(req);
   if (!auth.ok) return auth.response;
 
-  // Require the Anthropic key be configured before a workflow can even be
-  // created — otherwise the operator will hit the SDK error when they try to
-  // start it. Fail fast with a clear message.
+  // Require the `claude` CLI be installed + signed in before the workflow
+  // can be created. The orchestrator drives agents via the CLI (`claude
+  // --print --output-format stream-json`), which uses the operator's Claude
+  // Code login — no API key.
   const authStatus = anthropicAuthStatus();
   if (!authStatus.configured) {
     return NextResponse.json(
-      { error: "ANTHROPIC_API_KEY is not set on the controller. Configure it first." },
+      {
+        error:
+          authStatus.error ??
+          "Claude CLI not available. Install Claude Code and run `claude login`.",
+      },
       { status: 412 }
     );
   }
