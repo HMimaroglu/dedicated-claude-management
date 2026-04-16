@@ -154,6 +154,18 @@ function migrate(d: Db) {
     CREATE INDEX IF NOT EXISTS idx_instances_host ON instances(host_id);
     CREATE INDEX IF NOT EXISTS idx_instances_status ON instances(status);
     CREATE INDEX IF NOT EXISTS idx_instances_project ON instances(project_id);
+
+    CREATE TABLE IF NOT EXISTS terminal_tickets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      token_hash TEXT NOT NULL UNIQUE,
+      instance_id INTEGER NOT NULL REFERENCES instances(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL,
+      used_at INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_terminal_tickets_token ON terminal_tickets(token_hash);
+    CREATE INDEX IF NOT EXISTS idx_terminal_tickets_expires ON terminal_tickets(expires_at);
   `);
 }
 

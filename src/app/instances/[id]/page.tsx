@@ -6,6 +6,7 @@ import { getInstance } from "@/lib/instances";
 import { getProject } from "@/lib/projects";
 import { getHost } from "@/lib/hosts";
 import InstanceClient from "./InstanceClient";
+import TerminalView from "./TerminalView";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +39,13 @@ export default async function InstanceDetail(
         </div>
         <span className="text-sm text-zinc-400">{user.username}</span>
       </header>
-      <InstanceClient instance={instance} project={project} host={host} />
+      <div className="space-y-6">
+        <InstanceClient instance={instance} project={project} host={host} />
+        <section>
+          <h3 className="text-sm font-semibold mb-2 text-zinc-400">Live terminal</h3>
+          <TerminalView instance={instance} />
+        </section>
+      </div>
     </main>
   );
 }
