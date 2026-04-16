@@ -4,8 +4,10 @@ import { getDb } from "./db";
 export const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 export const LOGIN_MAX_FAILED_PER_IP = 5;
 // Per-username/global cap so an attacker rotating IPs (botnet, IPv6, Tor) can't
-// bypass per-IP throttling against the single admin account.
-export const LOGIN_MAX_FAILED_PER_USERNAME = 20;
+// bypass per-IP throttling against the single admin account. Sized tight
+// (10 / 15 min) because the operator may choose a short password — the
+// per-username limit becomes the dominant defense when entropy is low.
+export const LOGIN_MAX_FAILED_PER_USERNAME = 10;
 
 export interface RateLimitResult {
   allowed: boolean;

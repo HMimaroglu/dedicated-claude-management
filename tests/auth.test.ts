@@ -11,14 +11,23 @@ import {
 } from "../src/lib/auth";
 
 describe("validators", () => {
-  it("rejects short passwords", () => {
-    expect(validatePassword("short").ok).toBe(false);
-    expect(validatePassword("12345678901").ok).toBe(false);
-    expect(validatePassword("123456789012").ok).toBe(true);
+  it("accepts any non-empty password (no minimum length)", () => {
+    expect(validatePassword("a").ok).toBe(true);
+    expect(validatePassword("short").ok).toBe(true);
+    expect(validatePassword("correcthorse").ok).toBe(true);
+  });
+
+  it("rejects empty password", () => {
+    expect(validatePassword("").ok).toBe(false);
+  });
+
+  it("caps at MAX_PASSWORD_LENGTH to prevent argon2 DoS", () => {
+    expect(validatePassword("a".repeat(4096)).ok).toBe(true);
+    expect(validatePassword("a".repeat(4097)).ok).toBe(false);
   });
 
   it("rejects null bytes in passwords", () => {
-    expect(validatePassword("abcabcabcabc\0").ok).toBe(false);
+    expect(validatePassword("abc\0def").ok).toBe(false);
   });
 
   it("rejects non-string passwords", () => {

@@ -10,8 +10,11 @@ export const ARGON2_OPTS = {
   parallelism: 1,
 } as const;
 
-export const MIN_PASSWORD_LENGTH = 12;
-export const MAX_PASSWORD_LENGTH = 128;
+// Password policy: any non-empty password up to MAX_PASSWORD_LENGTH. The
+// upper bound exists only to prevent argon2 DoS from multi-MB inputs; it is
+// not a strength requirement. The operator explicitly opted out of a minimum.
+export const MIN_PASSWORD_LENGTH = 1;
+export const MAX_PASSWORD_LENGTH = 4096;
 // Leading char must be alphanumeric so the username can never be mistaken for a
 // CLI flag if it ever flows into a shell argv (defense in depth — we use exec
 // with arg arrays, but tighten the input anyway).
@@ -33,7 +36,7 @@ export function validateUsername(u: unknown): ValidationResult {
 export function validatePassword(pw: unknown): ValidationResult {
   if (typeof pw !== "string") return { ok: false, reason: "Password required" };
   if (pw.length < MIN_PASSWORD_LENGTH) {
-    return { ok: false, reason: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` };
+    return { ok: false, reason: "Password must not be empty" };
   }
   if (pw.length > MAX_PASSWORD_LENGTH) {
     return { ok: false, reason: `Password must be at most ${MAX_PASSWORD_LENGTH} characters` };

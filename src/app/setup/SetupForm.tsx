@@ -17,8 +17,8 @@ export default function SetupForm() {
       setError("Passwords do not match");
       return;
     }
-    if (password.length < 12) {
-      setError("Password must be at least 12 characters");
+    if (password.length < 1) {
+      setError("Password must not be empty");
       return;
     }
     start(async () => {
