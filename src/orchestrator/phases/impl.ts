@@ -108,6 +108,10 @@ export async function advanceImpl(wf: WorkflowRecord, d?: Db): Promise<ImplStepR
     // best-effort
   }
 
+  // NOTE on loop_count: this counter is shared across impl turns AND audit
+  // fail/signoff reject re-loops, so the cap represents TOTAL cycles through
+  // this aspect's impl↔audit loop, not just dev turns. Set
+  // max_iterations_per_aspect accordingly (default 10 is typically enough).
   const max = wf.max_iterations_per_aspect;
   const round = aspect.loop_count;
 
@@ -116,7 +120,7 @@ export async function advanceImpl(wf: WorkflowRecord, d?: Db): Promise<ImplStepR
       id: wf.id,
       from: "aspect_impl",
       to: "error",
-      last_error: `implementation did not complete after ${max} rounds`,
+      last_error: `implementation did not complete after ${max} total rounds`,
       db,
     });
     return { transitioned: true, newState: "error", reason: "impl rounds exhausted" };

@@ -25,6 +25,18 @@ export default async function WorkflowDetail({
   const project = getProject(workflow.project_id);
   const aspects = listAspects(workflowId);
   const events = recentWorkflowEvents(workflowId, 100);
+  const { getDb } = await import("@/lib/db");
+  const db = getDb();
+  const agents = db
+    .prepare(
+      "SELECT role, total_cost_usd, total_input_tokens, total_output_tokens FROM workflow_agents WHERE workflow_id = ? ORDER BY role"
+    )
+    .all(workflowId) as Array<{
+    role: string;
+    total_cost_usd: number;
+    total_input_tokens: number;
+    total_output_tokens: number;
+  }>;
 
   return (
     <main className="max-w-5xl mx-auto pt-12 px-4">
@@ -45,6 +57,7 @@ export default async function WorkflowDetail({
         project={project}
         aspects={aspects}
         events={events}
+        agents={agents}
       />
     </main>
   );

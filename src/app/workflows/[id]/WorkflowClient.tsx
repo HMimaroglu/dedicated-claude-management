@@ -1,6 +1,6 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useEffect, useTransition } from "react";
 import type {
   AspectRecord,
   WorkflowEventRecord,
@@ -8,19 +8,48 @@ import type {
 } from "@/lib/workflows";
 import type { ProjectRecord } from "@/lib/projects";
 
+interface AgentSummary {
+  role: string;
+  total_cost_usd: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+}
+
+const ACTIVE_STATES: Array<WorkflowRecord["state"]> = [
+  "decomposition",
+  "aspect_research",
+  "aspect_research_review",
+  "aspect_impl",
+  "aspect_audit",
+  "aspect_push",
+  "aspect_signoff",
+  "final_review",
+];
+
 export default function WorkflowClient({
   workflow,
   project,
   aspects,
   events,
+  agents,
 }: {
   workflow: WorkflowRecord;
   project: ProjectRecord | null;
   aspects: AspectRecord[];
   events: WorkflowEventRecord[];
+  agents: AgentSummary[];
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+
+  // Auto-refresh every 5s while the workflow is advancing. Stops once it
+  // reaches a terminal or waiting state so the operator can inspect without
+  // flicker.
+  useEffect(() => {
+    if (!ACTIVE_STATES.includes(workflow.state)) return;
+    const t = setInterval(() => router.refresh(), 5000);
+    return () => clearInterval(t);
+  }, [workflow.state, router]);
 
   function remove() {
     if (
@@ -136,9 +165,40 @@ export default function WorkflowClient({
           </button>
         </div>
         <p className="text-xs text-zinc-500 mt-3">
-          The orchestrator currently drives the decomposition phase (sys-design consensus).
-          Research and implementation phases land in later slices.
+          Orchestrator drives all 8 phases. Active workflows auto-refresh every 5s.
         </p>
+      </section>
+
+      <section>
+        <h3 className="text-sm font-semibold mb-2 text-zinc-400">Agent costs</h3>
+        {agents.length === 0 ? (
+          <p className="text-sm text-zinc-500">No agent sessions yet.</p>
+        ) : (
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="border-b border-zinc-800 text-left text-zinc-400">
+                <th className="py-2 px-2">Role</th>
+                <th className="py-2 px-2">Cost (USD)</th>
+                <th className="py-2 px-2">Input tokens</th>
+                <th className="py-2 px-2">Output tokens</th>
+              </tr>
+            </thead>
+            <tbody>
+              {agents.map((a) => (
+                <tr key={a.role} className="border-b border-zinc-900">
+                  <td className="py-1.5 px-2 font-mono">{a.role}</td>
+                  <td className="py-1.5 px-2 font-mono">${a.total_cost_usd.toFixed(4)}</td>
+                  <td className="py-1.5 px-2 font-mono text-zinc-400">
+                    {a.total_input_tokens.toLocaleString()}
+                  </td>
+                  <td className="py-1.5 px-2 font-mono text-zinc-400">
+                    {a.total_output_tokens.toLocaleString()}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </section>
 
       <section>

@@ -131,9 +131,15 @@ export function evaluateWorkspaceGuard(
 }
 
 // Validates the model name read from the DB against ALLOWED_MODELS. Prevents a
-// tampered/drifted row from pushing a bogus model name to the SDK.
+// tampered/drifted row from pushing a bogus model name to the SDK. If the
+// stored model isn't in the allowlist anymore we log a console warning so the
+// operator notices the silent downgrade.
 function safeModel(name: string): string {
-  return (ALLOWED_MODELS as readonly string[]).includes(name) ? name : DEFAULT_MODEL;
+  if ((ALLOWED_MODELS as readonly string[]).includes(name)) return name;
+  console.warn(
+    `[orchestrator] workflow model '${name}' is not in ALLOWED_MODELS; falling back to '${DEFAULT_MODEL}'`
+  );
+  return DEFAULT_MODEL;
 }
 
 // Builds the options blob we pass to the SDK's `query()`. We keep this typed

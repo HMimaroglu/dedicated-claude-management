@@ -18,6 +18,13 @@ export class BudgetExceededError extends Error {
 // Checks whether a workflow still has budget headroom. Throws
 // BudgetExceededError if spent >= budget. Call this BEFORE dispatching any new
 // SDK session.
+//
+// Known behavior: a single advance may fan out to 2-3 parallel SDK calls
+// (pairs of sys-design/research/dev or the 3-auditor panel). The pre-check
+// sees stale `spent_usd` until the batch completes, so actual cost can
+// overshoot the cap by up to one batch's worth before the *next* tick
+// transitions the workflow to 'error'. Budgets should be set with that
+// overshoot margin in mind.
 export function assertBudgetHeadroom(wf: WorkflowRecord): void {
   if (wf.spent_usd >= wf.budget_usd) {
     throw new BudgetExceededError(wf.id, wf.spent_usd, wf.budget_usd);

@@ -122,7 +122,9 @@ export async function advanceAudit(wf: WorkflowRecord, d?: Db): Promise<AuditSte
       phase: "aspect_audit",
       aspect_ord: aspect.ord,
     });
-    db.prepare("UPDATE aspects SET updated_at = ? WHERE id = ?").run(Date.now(), aspect.id);
+    // Deliberately do NOT bump aspect.updated_at here — we need it to remain
+    // at the "entered aspect_audit" timestamp so the haveAll check sees that
+    // agent updated_at values (set by the parallel turns above) are newer.
     return { transitioned: false, newState: null, reason: "audit dispatched" };
   }
 
