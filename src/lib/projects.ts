@@ -1,6 +1,9 @@
 import type { Db } from "./db";
 import { getDb } from "./db";
-import { execOnce, openSession, SshError } from "./ssh";
+// ssh.ts is dynamically imported inside cloneProject() only — keeping the
+// static module graph free of `ssh2` (and its native `cpu-features` addon)
+// so Next.js dev doesn't try to bundle the .node binary into client-visible
+// chunks when a page server-component just reads projects from the DB.
 import { getHost } from "./hosts";
 
 export type SourceType = "git" | "local";
@@ -313,6 +316,7 @@ export async function cloneProject(projectId: number, d?: Db): Promise<CloneResu
   const host = getHost(p.host_id, db);
   if (!host) throw new Error("host not found");
 
+  const { openSession, execOnce, SshError } = await import("./ssh");
   let conn;
   try {
     conn = await openSession(host);

@@ -1,8 +1,12 @@
 import type { Db } from "./db";
 import { getDb } from "./db";
-import { execOnce, openSession, SshError } from "./ssh";
 import { getHost } from "./hosts";
 import { getProject, shQuote } from "./projects";
+// ssh.ts is imported dynamically below (inside functions that actually need
+// SSH) so pulling `ssh2` / its native `cpu-features` addon into the module
+// graph only happens when we're really about to connect to a remote host.
+// Static import here caused Next.js dev to try to bundle the native .node
+// binary for page server components that never touch SSH.
 
 export type InstanceStatus =
   | "starting"
@@ -246,6 +250,7 @@ export async function spawnInstance(instanceId: number, d?: Db): Promise<SpawnRe
   const host = getHost(inst.host_id, db);
   if (!host) throw new Error("host not found");
 
+  const { openSession, execOnce, SshError } = await import("./ssh");
   const conn = await openSession(host);
   try {
     const cmd = buildSpawnCommand({
@@ -330,6 +335,7 @@ async function signalInstance(
   const host = getHost(inst.host_id, db);
   if (!host) throw new Error("host not found");
 
+  const { openSession, execOnce } = await import("./ssh");
   const conn = await openSession(host);
   try {
     // Resolve pid via tmux and signal it in one hop to avoid TOCTOU.
@@ -371,6 +377,7 @@ export async function killInstance(instanceId: number, d?: Db): Promise<{ ok: bo
   const host = getHost(inst.host_id, db);
   if (!host) throw new Error("host not found");
 
+  const { openSession, execOnce } = await import("./ssh");
   const conn = await openSession(host);
   try {
     // Attempt the kill; capture stderr so operator can see what went wrong.
@@ -456,6 +463,7 @@ export async function refreshInstanceStatus(instanceId: number, d?: Db): Promise
   if (!host) return inst.status;
 
   try {
+    const { openSession, execOnce } = await import("./ssh");
     const conn = await openSession(host);
     try {
       const check = await execOnce(conn, `tmux has-session -t ${shQuote(inst.tmux_session)}`, {

@@ -1,5 +1,6 @@
 import { listHosts, recordProbe } from "./hosts";
-import { probeHost } from "./ssh";
+// Dynamic ssh import: keeps ssh2 (+ cpu-features native .node) out of the
+// top-level module graph so Next.js dev doesn't try to bundle it.
 
 const DEFAULT_INTERVAL_MS = 15_000;
 const DEFAULT_CONCURRENCY = 16;
@@ -61,6 +62,10 @@ export async function runHeartbeatOnce(): Promise<void> {
   try {
     const hosts = listHosts();
     const active = hosts.filter((h) => h.status !== "quarantined");
+    if (active.length === 0) return;
+    // Lazy-load ssh.ts so the native addon is only touched when we actually
+    // have a remote host to probe.
+    const { probeHost } = await import("./ssh");
     await runBatched(active, CONCURRENCY, async (h) => {
       const result = await probeHost(h);
       try {
