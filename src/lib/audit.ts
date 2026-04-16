@@ -23,7 +23,15 @@ export type AuditEvent =
   | "instance.deleted"
   | "instance.paused"
   | "instance.resumed"
-  | "instance.auto_restart_toggled";
+  | "instance.auto_restart_toggled"
+  | "workflow.created"
+  | "workflow.started"
+  | "workflow.paused"
+  | "workflow.resumed"
+  | "workflow.stopped"
+  | "workflow.completed"
+  | "workflow.deleted"
+  | "workflow.budget_exceeded";
 
 export function audit(opts: {
   event: AuditEvent;

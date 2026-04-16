@@ -18,6 +18,7 @@ export interface ProjectRecord {
   clone_status: CloneStatus;
   clone_error: string | null;
   last_cloned_at: number | null;
+  multi_agent_enabled: boolean;
   created_at: number;
   updated_at: number;
 }
@@ -40,10 +41,15 @@ export interface ProjectUpdateInput {
   path_on_host?: string;
 }
 
-interface ProjectRow extends ProjectRecord {}
+interface ProjectRow extends Omit<ProjectRecord, "multi_agent_enabled"> {
+  multi_agent_enabled: number | null;
+}
 
 function rowToProject(r: ProjectRow): ProjectRecord {
-  return { ...r };
+  return {
+    ...r,
+    multi_agent_enabled: r.multi_agent_enabled === 1,
+  };
 }
 
 const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$/;

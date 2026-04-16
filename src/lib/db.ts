@@ -176,7 +176,9 @@ function migrate(d: Db) {
   // Schema version history:
   //   0 = initial (Phases 1-5)
   //   1 = Phase 6: add instances.auto_restart, last_restart_at, next_restart_at
-  const TARGET_VERSION = 1;
+  //   2 = Multi-agent workflows: workflows, aspects, workflow_agents,
+  //       workflow_events + projects.multi_agent_enabled column
+  const TARGET_VERSION = 2;
   if (userVersion < 1) {
     const existingCols = d
       .prepare("PRAGMA table_info(instances)")
@@ -191,6 +193,87 @@ function migrate(d: Db) {
     if (!names.has("next_restart_at")) {
       d.exec("ALTER TABLE instances ADD COLUMN next_restart_at INTEGER");
     }
+  }
+  if (userVersion < 2) {
+    const projCols = d.prepare("PRAGMA table_info(projects)").all() as Array<{ name: string }>;
+    if (!projCols.some((c) => c.name === "multi_agent_enabled")) {
+      d.exec("ALTER TABLE projects ADD COLUMN multi_agent_enabled INTEGER NOT NULL DEFAULT 0");
+    }
+    d.exec(`
+      CREATE TABLE IF NOT EXISTS workflows (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        idea TEXT NOT NULL,
+        state TEXT NOT NULL DEFAULT 'idea_intake'
+          CHECK (state IN (
+            'idea_intake','decomposition','awaiting_human_gate','aspect_research',
+            'aspect_research_review','aspect_impl','aspect_audit','aspect_push',
+            'aspect_signoff','final_review','complete','paused','error'
+          )),
+        current_aspect_ord INTEGER,
+        plan_md TEXT,
+        workspace_path TEXT NOT NULL,
+        require_human_gate INTEGER NOT NULL DEFAULT 1 CHECK (require_human_gate IN (0,1)),
+        budget_usd REAL NOT NULL DEFAULT 10.0 CHECK (budget_usd > 0 AND budget_usd <= 1000),
+        spent_usd REAL NOT NULL DEFAULT 0.0 CHECK (spent_usd >= 0),
+        max_iterations_per_aspect INTEGER NOT NULL DEFAULT 10
+          CHECK (max_iterations_per_aspect > 0 AND max_iterations_per_aspect <= 50),
+        model TEXT NOT NULL DEFAULT 'claude-sonnet-4-6',
+        last_error TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        completed_at INTEGER,
+        paused_at INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS idx_workflows_project ON workflows(project_id);
+      CREATE INDEX IF NOT EXISTS idx_workflows_state ON workflows(state);
+
+      CREATE TABLE IF NOT EXISTS aspects (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        workflow_id INTEGER NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+        ord INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        depends_on TEXT NOT NULL DEFAULT '[]',
+        acceptance_criteria TEXT,
+        state TEXT NOT NULL DEFAULT 'pending'
+          CHECK (state IN ('pending','research','review','impl','audit','push','signoff','complete','error')),
+        research_md TEXT,
+        loop_count INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        UNIQUE (workflow_id, ord)
+      );
+      CREATE INDEX IF NOT EXISTS idx_aspects_workflow ON aspects(workflow_id);
+
+      CREATE TABLE IF NOT EXISTS workflow_agents (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        workflow_id INTEGER NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+        role TEXT NOT NULL
+          CHECK (role IN ('sd1','sd2','r1','r2','d1','d2','a1','a2','a3')),
+        sdk_session_id TEXT,
+        total_cost_usd REAL NOT NULL DEFAULT 0.0,
+        total_input_tokens INTEGER NOT NULL DEFAULT 0,
+        total_output_tokens INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        UNIQUE (workflow_id, role)
+      );
+
+      CREATE TABLE IF NOT EXISTS workflow_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        workflow_id INTEGER NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+        aspect_ord INTEGER,
+        phase TEXT NOT NULL,
+        actor_role TEXT,
+        kind TEXT NOT NULL,
+        payload TEXT,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_workflow_events_workflow
+        ON workflow_events(workflow_id, created_at);
+    `);
   }
   if (userVersion < TARGET_VERSION) {
     d.pragma(`user_version = ${TARGET_VERSION}`);
