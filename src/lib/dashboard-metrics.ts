@@ -1,3 +1,4 @@
+import os from "node:os";
 import type { Db } from "./db";
 import { getDb } from "./db";
 import { listHosts, recentProbes, type HostRecord, type ProbeSnapshot } from "./hosts";
@@ -7,6 +8,33 @@ export interface HostMetric {
   host: HostRecord;
   latest: ProbeSnapshot | null;
   series: ProbeSnapshot[]; // newest first; UI should reverse for left-to-right time axis
+}
+
+// Live snapshot of the controller's own resources. The controller isn't a
+// row in `hosts` — local instances/projects use host_id=null — so we surface
+// its utilization as its own object on the dashboard.
+export interface LocalMetric {
+  hostname: string;
+  platform: string;
+  cores: number;
+  load_1m: number;
+  mem_total_mb: number;
+  mem_used_mb: number;
+  uptime_sec: number;
+}
+
+export function computeLocalMetric(): LocalMetric {
+  const totalMb = Math.round(os.totalmem() / (1024 * 1024));
+  const freeMb = Math.round(os.freemem() / (1024 * 1024));
+  return {
+    hostname: os.hostname(),
+    platform: `${os.platform()} ${os.arch()}`,
+    cores: os.cpus().length,
+    load_1m: os.loadavg()[0] ?? 0,
+    mem_total_mb: totalMb,
+    mem_used_mb: Math.max(0, totalMb - freeMb),
+    uptime_sec: Math.floor(os.uptime()),
+  };
 }
 
 export interface Totals {
@@ -23,7 +51,9 @@ export interface Totals {
   gpu_count: number;
 }
 
-export function computeDashboard(d?: Db): { totals: Totals; hosts: HostMetric[] } {
+export function computeDashboard(
+  d?: Db
+): { totals: Totals; hosts: HostMetric[]; local: LocalMetric } {
   const db = d ?? getDb();
   const hosts = listHosts(db);
   const instances = listInstances(db);
@@ -34,9 +64,13 @@ export function computeDashboard(d?: Db): { totals: Totals; hosts: HostMetric[] 
     return { host: h, latest, series };
   });
 
-  let ram_total_mb = 0;
-  let ram_used_mb = 0;
-  let cores_total = 0;
+  // Local/controller counts as the implicit first machine — include its
+  // cores + RAM in the aggregate totals.
+  const local = computeLocalMetric();
+
+  let ram_total_mb = local.mem_total_mb;
+  let ram_used_mb = local.mem_used_mb;
+  let cores_total = local.cores;
   let gpu_count = 0;
   for (const m of metrics) {
     cores_total += m.host.capabilities.cores ?? 0;
@@ -50,6 +84,8 @@ export function computeDashboard(d?: Db): { totals: Totals; hosts: HostMetric[] 
   }
 
   const totals: Totals = {
+    // hosts counts remote hosts only; the controller is surfaced separately
+    // as `local`. Running/online counts still refer to configured hosts.
     hosts: hosts.length,
     online: hosts.filter((h) => h.status === "online").length,
     quarantined: hosts.filter((h) => h.status === "quarantined").length,
@@ -63,5 +99,5 @@ export function computeDashboard(d?: Db): { totals: Totals; hosts: HostMetric[] 
     gpu_count,
   };
 
-  return { totals, hosts: metrics };
+  return { totals, hosts: metrics, local };
 }

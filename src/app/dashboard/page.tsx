@@ -14,8 +14,10 @@ export default async function DashboardPage() {
   const user = await getSessionUser();
   if (!user) redirect("/login");
 
-  const { totals, hosts } = computeDashboard();
+  const { totals, hosts, local } = computeDashboard();
   const memUsedPct = totals.ram_total_mb > 0 ? (totals.ram_used_mb / totals.ram_total_mb) * 100 : null;
+  const localMemPct = local.mem_total_mb > 0 ? (local.mem_used_mb / local.mem_total_mb) * 100 : 0;
+  const localLoadPct = Math.min(100, (local.load_1m / Math.max(1, local.cores)) * 100);
 
   return (
     <main className="max-w-5xl mx-auto pt-12 px-4 pb-16">
@@ -56,12 +58,43 @@ export default async function DashboardPage() {
         <StatCard label="Paused" value={totals.paused.toString()} />
       </section>
 
+      <section className="mb-8">
+        <h2 className="text-sm font-semibold text-zinc-400 mb-3">Local (controller)</h2>
+        <div className="bg-zinc-900 border border-zinc-800 rounded-md p-4">
+          <div className="flex justify-between items-start mb-3">
+            <div>
+              <div className="text-xl font-semibold font-mono">{local.hostname}</div>
+              <div className="text-xs text-zinc-500 mt-0.5">{local.platform} · {local.cores} cores</div>
+            </div>
+            <span className="px-2 py-0.5 rounded text-xs bg-emerald-900 text-emerald-300">online</span>
+          </div>
+          <div className="grid grid-cols-4 gap-3 text-sm">
+            <Stat label="CPU load (1m)" value={local.load_1m.toFixed(2)} />
+            <Stat
+              label="CPU used"
+              value={`${localLoadPct.toFixed(0)}%`}
+              bar={localLoadPct}
+              tone={localLoadPct > 80 ? "warn" : "ok"}
+            />
+            <Stat
+              label="RAM used"
+              value={`${localMemPct.toFixed(0)}%`}
+              bar={localMemPct}
+              sub={`${Math.round(local.mem_used_mb / 1024)} / ${Math.round(local.mem_total_mb / 1024)} GB`}
+              tone={localMemPct > 85 ? "warn" : "ok"}
+            />
+            <Stat label="Uptime" value={formatUptime(local.uptime_sec)} />
+          </div>
+        </div>
+      </section>
+
       <section>
-        <h2 className="text-sm font-semibold text-zinc-400 mb-3">Per-host CPU load (last 30 probes)</h2>
+        <h2 className="text-sm font-semibold text-zinc-400 mb-3">Remote hosts — CPU load (last 30 probes)</h2>
         {hosts.length === 0 ? (
           <p className="text-sm text-zinc-500">
-            No hosts yet.{" "}
-            <Link href="/hosts" className="underline">Add one →</Link>
+            No remote hosts registered.{" "}
+            <Link href="/hosts" className="underline">Add one →</Link>{" "}
+            when you want more compute.
           </p>
         ) : (
           <div className="space-y-2">
@@ -127,4 +160,41 @@ function StatCard({
       {sub && <div className="text-xs text-zinc-500 mt-1">{sub}</div>}
     </div>
   );
+}
+
+function Stat({
+  label,
+  value,
+  sub,
+  bar,
+  tone,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  bar?: number;
+  tone?: "ok" | "warn";
+}) {
+  return (
+    <div>
+      <div className="text-zinc-500 text-xs mb-0.5">{label}</div>
+      <div className="font-mono">{value}</div>
+      {sub && <div className="text-zinc-500 text-xs mt-0.5">{sub}</div>}
+      {bar !== undefined && (
+        <div className="mt-1 h-1 bg-zinc-800 rounded overflow-hidden">
+          <div
+            className={`h-full ${tone === "warn" ? "bg-red-500" : "bg-emerald-500"}`}
+            style={{ width: `${Math.min(100, Math.max(0, bar))}%` }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function formatUptime(sec: number): string {
+  if (sec < 60) return `${sec}s`;
+  if (sec < 3600) return `${Math.floor(sec / 60)}m`;
+  if (sec < 86400) return `${Math.floor(sec / 3600)}h`;
+  return `${Math.floor(sec / 86400)}d`;
 }
