@@ -167,7 +167,7 @@ function SpawnForm({
       </div>
       {error && <p className="text-sm text-red-400">{error}</p>}
       <p className="text-xs text-zinc-500">
-        Runs <code className="bg-zinc-950 px-1 rounded">claude remote-control --dangerously-skip-permissions</code> inside tmux. Defaults to this machine; pick a remote host for extra compute (GPU, more cores).
+        Runs <code className="bg-zinc-950 px-1 rounded">claude remote-control --permission-mode bypassPermissions</code> inside tmux. Defaults to this machine; pick a remote host for extra compute (GPU, more cores).
       </p>
       <button type="submit" disabled={pending}
         className="bg-zinc-100 text-zinc-900 px-3 py-1.5 rounded text-sm font-medium disabled:opacity-50">

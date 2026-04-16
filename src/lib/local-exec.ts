@@ -151,7 +151,11 @@ export async function spawnLocalTmux(opts: LocalSpawnOpts): Promise<LocalSpawnRe
   }
 
   const extra = (opts.extraClaudeArgs ?? []).map(shQuote).join(" ");
-  const inner = `exec claude remote-control --dangerously-skip-permissions --name ${shQuote(opts.instanceName)} ${extra}`.trim();
+  // `claude remote-control` uses --permission-mode bypassPermissions, not
+  // the --dangerously-skip-permissions flag which is for plain `claude`.
+  // --spawn same-dir skips the interactive first-run prompt that would
+  // otherwise block the session on stdin.
+  const inner = `exec claude remote-control --permission-mode bypassPermissions --spawn same-dir --name ${shQuote(opts.instanceName)} ${extra}`.trim();
   // Kill any pre-existing session with the same name (belt-and-braces).
   const cmd =
     `tmux kill-session -t ${shQuote(opts.session)} 2>/dev/null; ` +
