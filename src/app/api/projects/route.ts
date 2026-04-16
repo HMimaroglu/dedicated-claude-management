@@ -20,7 +20,8 @@ const CreateSchema = z.object({
   source_type: z.enum(["git", "local"]),
   git_url: z.string().optional(),
   git_branch: z.string().optional(),
-  host_id: z.number().int().positive(),
+  // host_id is optional: null/missing means "local/controller".
+  host_id: z.number().int().positive().nullable().optional(),
   path_on_host: z.string(),
 });
 

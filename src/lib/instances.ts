@@ -23,7 +23,8 @@ export interface InstanceRecord {
   id: number;
   name: string;
   project_id: number;
-  host_id: number;
+  // null means the instance runs locally on the controller (no SSH).
+  host_id: number | null;
   tmux_session: string;
   status: InstanceStatus;
   pid: number | null;
@@ -85,10 +86,12 @@ export function createInstanceRow(input: InstanceCreateInput, d?: Db): InstanceR
   const project = getProject(input.project_id, db);
   if (!project) throw new Error("project not found");
 
-  const host_id = input.host_id ?? project.host_id;
-  if (!host_id) throw new Error("project has no host_id");
-  const host = getHost(host_id, db);
-  if (!host) throw new Error("host not found");
+  // null host_id means "local/controller" — don't require a hosts row.
+  const host_id = input.host_id !== undefined ? input.host_id : project.host_id;
+  if (host_id !== null && host_id !== undefined) {
+    const host = getHost(host_id, db);
+    if (!host) throw new Error("host not found");
+  }
 
   if (project.source_type === "git" && project.clone_status !== "ready" && project.clone_status !== "skipped") {
     throw new Error(`project clone status is '${project.clone_status}', clone it first`);
@@ -107,7 +110,7 @@ export function createInstanceRow(input: InstanceCreateInput, d?: Db): InstanceR
     .run(
       input.name,
       input.project_id,
-      host_id,
+      host_id ?? null,
       placeholder,
       JSON.stringify(input.requirements ?? {}),
       now,
@@ -212,6 +215,33 @@ export async function spawnInstance(instanceId: number, d?: Db): Promise<SpawnRe
   if (!inst) throw new Error("instance not found");
   const project = getProject(inst.project_id, db);
   if (!project) throw new Error("project not found");
+
+  // Local (controller) spawn path — no SSH, just tmux on the local box.
+  if (inst.host_id === null) {
+    const { spawnLocalTmux } = await import("./local-exec");
+    const result = await spawnLocalTmux({
+      session: inst.tmux_session,
+      projectPath: project.path_on_host,
+      instanceName: inst.name,
+    });
+    if (!result.success) {
+      setInstanceStatus(
+        instanceId,
+        "error",
+        { spawn_error: result.error?.slice(0, 512) ?? null },
+        db
+      );
+      return { success: false, stderr: result.stderr, error: result.error };
+    }
+    setInstanceStatus(
+      instanceId,
+      "running",
+      { spawned_at: Date.now(), spawn_error: null, pid: result.pid },
+      db
+    );
+    return { success: true, stderr: result.stderr, error: null };
+  }
+
   const host = getHost(inst.host_id, db);
   if (!host) throw new Error("host not found");
 
@@ -289,6 +319,13 @@ async function signalInstance(
   const db = d ?? getDb();
   const inst = getInstance(instanceId, db);
   if (!inst) throw new Error("instance not found");
+
+  if (inst.host_id === null) {
+    const { signalLocal } = await import("./local-exec");
+    const r = await signalLocal(inst.tmux_session, signal);
+    if (r.ok) setInstanceStatus(instanceId, nextStatus, {}, db);
+    return r;
+  }
   const host = getHost(inst.host_id, db);
   if (!host) throw new Error("host not found");
 
@@ -322,6 +359,14 @@ export async function killInstance(instanceId: number, d?: Db): Promise<{ ok: bo
   const db = d ?? getDb();
   const inst = getInstance(instanceId, db);
   if (!inst) throw new Error("instance not found");
+
+  if (inst.host_id === null) {
+    const { killLocalTmux } = await import("./local-exec");
+    const r = await killLocalTmux(inst.tmux_session);
+    if (r.ok) setInstanceStatus(instanceId, "stopped", { stopped_at: Date.now() }, db);
+    return r;
+  }
+
   const host = getHost(inst.host_id, db);
   if (!host) throw new Error("host not found");
 
@@ -382,6 +427,29 @@ export async function refreshInstanceStatus(instanceId: number, d?: Db): Promise
   const prev = lastRefresh.get(instanceId);
   if (prev && now - prev < REFRESH_COOLDOWN_MS) return inst.status;
   lastRefresh.set(instanceId, now);
+
+  // Local instance — check tmux on the controller directly.
+  if (inst.host_id === null) {
+    const { tmuxHasSessionLocal } = await import("./local-exec");
+    try {
+      const exists = await tmuxHasSessionLocal(inst.tmux_session);
+      if (exists) {
+        if (inst.status === "starting") {
+          setInstanceStatus(instanceId, "running", {}, db);
+          return "running";
+        }
+        db.prepare("UPDATE instances SET last_check_at = ? WHERE id = ?").run(Date.now(), instanceId);
+        return inst.status;
+      }
+      if (inst.status === "running" || inst.status === "paused" || inst.status === "starting") {
+        setInstanceStatus(instanceId, "crashed", { stopped_at: Date.now() }, db);
+        return "crashed";
+      }
+      return inst.status;
+    } catch {
+      return inst.status;
+    }
+  }
 
   const host = getHost(inst.host_id, db);
   if (!host) return inst.status;

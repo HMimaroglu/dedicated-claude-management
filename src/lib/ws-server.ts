@@ -121,6 +121,18 @@ async function handleConnection(ws: WebSocket, rawUrl: string): Promise<void> {
     ws.close(1011, "instance gone");
     return;
   }
+  // Local instances (host_id=null) use the controller's own tmux. In that
+  // case we'd need a PTY bridge (node-pty) which isn't wired yet. Close with
+  // a clear message; the operator can `tmux attach -t dcm-<id>` from a local
+  // shell on the controller in the meantime.
+  if (instance.host_id === null) {
+    safeSendText(
+      ws,
+      `\r\n[dcm] live terminal for local/controller instances is not yet wired. Use 'tmux attach -t ${instance.tmux_session}' from a shell on the controller.\r\n`
+    );
+    ws.close(1011, "local terminal not supported");
+    return;
+  }
   const host = getHost(instance.host_id);
   if (!host) {
     ws.close(1011, "host gone");

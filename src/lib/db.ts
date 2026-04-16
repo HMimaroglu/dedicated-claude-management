@@ -139,7 +139,9 @@ function migrate(d: Db) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE,
       project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
-      host_id INTEGER NOT NULL REFERENCES hosts(id) ON DELETE RESTRICT,
+      -- host_id is nullable: null means the instance runs on the controller
+      -- itself (local tmux). A specific id points at a remote host row.
+      host_id INTEGER REFERENCES hosts(id) ON DELETE RESTRICT,
       tmux_session TEXT NOT NULL UNIQUE,
       status TEXT NOT NULL DEFAULT 'starting'
         CHECK (status IN ('starting','running','paused','stopped','crashed','error')),
@@ -179,7 +181,8 @@ function migrate(d: Db) {
   //   2 = Multi-agent workflows: workflows, aspects, workflow_agents,
   //       workflow_events + projects.multi_agent_enabled column
   //   3 = WF Phase 3 decomposition: workflow_agents.last_text + workflows.consensus_round
-  const TARGET_VERSION = 3;
+  //   4 = Local/controller projects: instances.host_id becomes nullable
+  const TARGET_VERSION = 4;
   if (userVersion < 1) {
     const existingCols = d
       .prepare("PRAGMA table_info(instances)")
@@ -286,6 +289,48 @@ function migrate(d: Db) {
     const wfCols = d.prepare("PRAGMA table_info(workflows)").all() as Array<{ name: string }>;
     if (!wfCols.some((c) => c.name === "consensus_round")) {
       d.exec("ALTER TABLE workflows ADD COLUMN consensus_round INTEGER NOT NULL DEFAULT 0");
+    }
+  }
+  if (userVersion < 4) {
+    // Rebuild instances.host_id to allow NULL (controller/local instances).
+    // SQLite can't ALTER a column's nullability in place — table rebuild.
+    const instCols = d
+      .prepare("PRAGMA table_info(instances)")
+      .all() as Array<{ name: string; notnull: number }>;
+    const hostCol = instCols.find((c) => c.name === "host_id");
+    if (hostCol && hostCol.notnull === 1) {
+      d.exec(`
+        CREATE TABLE instances_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE,
+          project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
+          host_id INTEGER REFERENCES hosts(id) ON DELETE RESTRICT,
+          tmux_session TEXT NOT NULL UNIQUE,
+          status TEXT NOT NULL DEFAULT 'starting'
+            CHECK (status IN ('starting','running','paused','stopped','crashed','error')),
+          pid INTEGER,
+          spawn_error TEXT,
+          requirements TEXT NOT NULL DEFAULT '{}',
+          auto_restart INTEGER NOT NULL DEFAULT 1,
+          restart_count INTEGER NOT NULL DEFAULT 0,
+          last_restart_at INTEGER,
+          next_restart_at INTEGER,
+          spawned_at INTEGER,
+          stopped_at INTEGER,
+          last_check_at INTEGER,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+        INSERT INTO instances_new SELECT
+          id, name, project_id, host_id, tmux_session, status, pid, spawn_error,
+          requirements, auto_restart, restart_count, last_restart_at, next_restart_at,
+          spawned_at, stopped_at, last_check_at, created_at, updated_at FROM instances;
+        DROP TABLE instances;
+        ALTER TABLE instances_new RENAME TO instances;
+        CREATE INDEX IF NOT EXISTS idx_instances_host ON instances(host_id);
+        CREATE INDEX IF NOT EXISTS idx_instances_status ON instances(status);
+        CREATE INDEX IF NOT EXISTS idx_instances_project ON instances(project_id);
+      `);
     }
   }
   if (userVersion < TARGET_VERSION) {

@@ -67,7 +67,16 @@ export default function InstanceClient({
         </div>
         <div className="grid grid-cols-2 gap-3 text-sm">
           <Stat label="Project" value={project?.name ?? "—"} />
-          <Stat label="Host" value={host ? `${host.ssh_user}@${host.address}:${host.port}` : "—"} />
+          <Stat
+            label="Host"
+            value={
+              instance.host_id === null
+                ? "local (controller)"
+                : host
+                  ? `${host.ssh_user}@${host.address}:${host.port}`
+                  : "—"
+            }
+          />
           <Stat label="Working dir" value={project?.path_on_host ?? "—"} />
           <Stat label="PID" value={instance.pid !== null ? String(instance.pid) : "—"} />
           <Stat label="Restart count" value={String(instance.restart_count)} />

@@ -23,7 +23,7 @@ export default async function InstanceDetail(
   const instance = getInstance(instanceId);
   if (!instance) notFound();
   const project = getProject(instance.project_id);
-  const host = getHost(instance.host_id);
+  const host = instance.host_id !== null ? getHost(instance.host_id) : null;
 
   return (
     <main className="max-w-5xl mx-auto pt-12 px-4">

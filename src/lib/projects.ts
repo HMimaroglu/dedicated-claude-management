@@ -29,7 +29,9 @@ export interface ProjectCreateInput {
   source_type: SourceType;
   git_url?: string;
   git_branch?: string;
-  host_id: number;
+  // null or undefined means "the controller itself" (local). A specific
+  // host_id refers to a remote host registered in the hosts table.
+  host_id?: number | null;
   path_on_host: string;
 }
 
@@ -147,10 +149,15 @@ export function createProject(input: ProjectCreateInput, d?: Db): ProjectRecord 
       if (berr) errs.push(berr);
     }
   }
-  if (!Number.isInteger(input.host_id) || input.host_id <= 0) errs.push("host_id required");
+  // host_id is optional: null/undefined means "local/controller".
+  const hostId =
+    input.host_id === null || input.host_id === undefined ? null : input.host_id;
+  if (hostId !== null) {
+    if (!Number.isInteger(hostId) || hostId <= 0) errs.push("host_id must be a positive integer or null");
+  }
   if (errs.length) throw new Error(errs.join("; "));
 
-  if (!getHost(input.host_id, db)) throw new Error("host not found");
+  if (hostId !== null && !getHost(hostId, db)) throw new Error("host not found");
 
   const now = Date.now();
   const status: CloneStatus = input.source_type === "local" ? "skipped" : "pending";
@@ -168,7 +175,7 @@ export function createProject(input: ProjectCreateInput, d?: Db): ProjectRecord 
       input.source_type,
       input.source_type === "git" ? (input.git_url ?? null) : null,
       input.source_type === "git" ? (input.git_branch ?? null) : null,
-      input.host_id,
+      hostId,
       input.path_on_host,
       status,
       now,
@@ -274,14 +281,37 @@ export async function cloneProject(projectId: number, d?: Db): Promise<CloneResu
   const p = getProject(projectId, db);
   if (!p) throw new Error("project not found");
   if (p.source_type !== "git") throw new Error("only git projects can be cloned");
-  if (!p.git_url || !p.host_id) throw new Error("project missing git_url or host_id");
-
-  const host = getHost(p.host_id, db);
-  if (!host) throw new Error("host not found");
+  if (!p.git_url) throw new Error("project missing git_url");
 
   if (!tryClaimCloning(projectId, db)) {
     throw new Error("another clone is in progress");
   }
+
+  const branchFlag = p.git_branch ? `--branch ${shQuote(p.git_branch)}` : "";
+  const gitCmd =
+    `mkdir -p -- ${shQuote(dirname(p.path_on_host))} && ` +
+    `GIT_TERMINAL_PROMPT=0 git clone --depth=1 ${branchFlag} -- ` +
+    `${shQuote(p.git_url)} ${shQuote(p.path_on_host)}`;
+
+  // Local clone (host_id is null → runs on the controller itself).
+  if (p.host_id === null) {
+    const { execLocal } = await import("./local-exec");
+    try {
+      const res = await execLocal(gitCmd, { timeoutMs: 60_000 });
+      const ok = res.code === 0;
+      const error = ok ? null : (res.stderr || res.stdout || `exit ${res.code}`).slice(0, 512);
+      setCloneStatus(projectId, ok ? "ready" : "error", error, db);
+      return { success: ok, stdout: res.stdout, stderr: res.stderr, error };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setCloneStatus(projectId, "error", msg.slice(0, 512), db);
+      return { success: false, stdout: "", stderr: "", error: msg };
+    }
+  }
+
+  // Remote clone over SSH.
+  const host = getHost(p.host_id, db);
+  if (!host) throw new Error("host not found");
 
   let conn;
   try {
@@ -293,13 +323,7 @@ export async function cloneProject(projectId: number, d?: Db): Promise<CloneResu
   }
 
   try {
-    // mkdir -p parent, then git clone. -- stops option parsing.
-    const branchFlag = p.git_branch ? `--branch ${shQuote(p.git_branch)}` : "";
-    const cmd =
-      `mkdir -p -- ${shQuote(dirname(p.path_on_host))} && ` +
-      `GIT_TERMINAL_PROMPT=0 git clone --depth=1 ${branchFlag} -- ` +
-      `${shQuote(p.git_url)} ${shQuote(p.path_on_host)}`;
-    const res = await execOnce(conn, cmd, { timeoutMs: 60_000 });
+    const res = await execOnce(conn, gitCmd, { timeoutMs: 60_000 });
     const ok = res.code === 0;
     const error = ok ? null : (res.stderr || res.stdout || `exit ${res.code}`).slice(0, 512);
     setCloneStatus(projectId, ok ? "ready" : "error", error, db);

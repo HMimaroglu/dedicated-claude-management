@@ -19,18 +19,17 @@ export default function ProjectsClient({
       <button
         onClick={() => setShowAdd((s) => !s)}
         className="bg-zinc-100 text-zinc-900 px-3 py-1.5 rounded text-sm font-medium"
-        disabled={hosts.length === 0}
-        title={hosts.length === 0 ? "Add a host first" : ""}
       >
         {showAdd ? "Cancel" : "+ Add project"}
       </button>
-      {hosts.length === 0 && (
-        <p className="text-sm text-yellow-400">
-          Add a host first — projects live on a host.{" "}
-          <Link href="/hosts" className="underline">Go to hosts →</Link>
+      {hosts.length === 0 && !showAdd && (
+        <p className="text-sm text-zinc-500">
+          Projects default to running on this machine (the controller).{" "}
+          <Link href="/hosts" className="underline">Add remote hosts →</Link>{" "}
+          when you want more compute.
         </p>
       )}
-      {showAdd && hosts.length > 0 && (
+      {showAdd && (
         <AddForm hosts={hosts} onDone={() => { setShowAdd(false); router.refresh(); }} />
       )}
       {initialProjects.length === 0 ? (
@@ -54,7 +53,9 @@ export default function ProjectsClient({
                 <tr key={p.id} className="border-b border-zinc-900">
                   <td className="py-2 px-2 font-mono">{p.name}</td>
                   <td className="py-2 px-2 text-zinc-400">{p.source_type}</td>
-                  <td className="py-2 px-2 font-mono text-zinc-400">{host?.name ?? "—"}</td>
+                  <td className="py-2 px-2 font-mono text-zinc-400">
+                    {p.host_id === null ? "local (controller)" : (host?.name ?? "—")}
+                  </td>
                   <td className="py-2 px-2 font-mono text-zinc-400 truncate max-w-xs">{p.path_on_host}</td>
                   <td className="py-2 px-2"><StatusPill status={p.clone_status} /></td>
                   <td className="py-2 px-2 text-right">
@@ -86,7 +87,8 @@ function AddForm({ hosts, onDone }: { hosts: HostRecord[]; onDone: () => void })
   const [sourceType, setSourceType] = useState<"git" | "local">("git");
   const [gitUrl, setGitUrl] = useState("");
   const [gitBranch, setGitBranch] = useState("");
-  const [hostId, setHostId] = useState<string>(hosts[0] ? String(hosts[0].id) : "");
+  // "" = local/controller (null on the wire). Otherwise numeric host id.
+  const [hostId, setHostId] = useState<string>("");
   const [pathOnHost, setPathOnHost] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -98,7 +100,7 @@ function AddForm({ hosts, onDone }: { hosts: HostRecord[]; onDone: () => void })
       name,
       description: description || undefined,
       source_type: sourceType,
-      host_id: parseInt(hostId, 10),
+      host_id: hostId === "" ? null : parseInt(hostId, 10),
       path_on_host: pathOnHost,
     };
     if (sourceType === "git") {
@@ -128,6 +130,7 @@ function AddForm({ hosts, onDone }: { hosts: HostRecord[]; onDone: () => void })
           <span className="block mb-1">Host</span>
           <select value={hostId} onChange={(e) => setHostId(e.target.value)}
             className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1.5">
+            <option value="">Local (this machine)</option>
             {hosts.map((h) => (
               <option key={h.id} value={h.id}>{h.name}</option>
             ))}

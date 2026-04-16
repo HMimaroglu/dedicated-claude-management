@@ -61,7 +61,9 @@ export default function InstancesClient({
                 <tr key={i.id} className="border-b border-zinc-900">
                   <td className="py-2 px-2 font-mono">{i.name}</td>
                   <td className="py-2 px-2 text-zinc-400">{project?.name ?? "—"}</td>
-                  <td className="py-2 px-2 text-zinc-400">{host?.name ?? "—"}</td>
+                  <td className="py-2 px-2 text-zinc-400">
+                    {i.host_id === null ? "local" : (host?.name ?? "—")}
+                  </td>
                   <td className="py-2 px-2 font-mono text-zinc-500 text-xs">{i.tmux_session}</td>
                   <td className="py-2 px-2"><StatusPill status={i.status} /></td>
                   <td className="py-2 px-2 text-zinc-500 text-xs">
