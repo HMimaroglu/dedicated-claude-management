@@ -23,7 +23,7 @@ export default async function HostDetail(
   const probes = recentProbes(hostId, 50);
 
   return (
-    <main className="max-w-4xl mx-auto pt-12 px-4">
+    <main className="max-w-5xl mx-auto pt-12 px-4">
       <header className="flex justify-between items-center mb-8">
         <div className="flex items-center gap-4">
           <Link href="/dashboard" className="text-2xl font-semibold hover:text-zinc-300">DCM</Link>
