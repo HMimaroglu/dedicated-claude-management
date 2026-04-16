@@ -36,6 +36,21 @@ export default function WorkflowClient({
     });
   }
 
+  function runAction(path: string) {
+    start(async () => {
+      const r = await fetch(path, { method: "POST" });
+      if (!r.ok) alert((await r.json().catch(() => ({}))).error ?? "Request failed");
+      router.refresh();
+    });
+  }
+
+  const canStart = workflow.state === "idea_intake" || workflow.state === "paused";
+  const canApprove = workflow.state === "awaiting_human_gate";
+  const canStop =
+    workflow.state !== "complete" &&
+    workflow.state !== "error" &&
+    workflow.state !== "paused";
+
   const budgetPct = Math.min(100, (workflow.spent_usd / workflow.budget_usd) * 100);
 
   return (
@@ -89,7 +104,29 @@ export default function WorkflowClient({
             Error: {workflow.last_error}
           </p>
         )}
-        <div className="mt-4 flex gap-2">
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            disabled={pending || !canStart}
+            onClick={() => runAction(`/api/workflows/${workflow.id}/start`)}
+            className="bg-emerald-900 text-emerald-100 px-3 py-1.5 rounded text-sm font-medium disabled:opacity-50"
+          >
+            {workflow.state === "paused" ? "Resume" : "Start"}
+          </button>
+          <button
+            disabled={pending || !canApprove}
+            onClick={() => runAction(`/api/workflows/${workflow.id}/approve`)}
+            className="bg-blue-900 text-blue-100 px-3 py-1.5 rounded text-sm font-medium disabled:opacity-50"
+            title={canApprove ? "Approve the decomposition plan and continue to research" : "Only available at the human gate"}
+          >
+            Approve plan
+          </button>
+          <button
+            disabled={pending || !canStop}
+            onClick={() => runAction(`/api/workflows/${workflow.id}/stop`)}
+            className="bg-yellow-900 text-yellow-100 px-3 py-1.5 rounded text-sm font-medium disabled:opacity-50"
+          >
+            Pause
+          </button>
           <button
             disabled={pending}
             onClick={remove}
@@ -99,8 +136,8 @@ export default function WorkflowClient({
           </button>
         </div>
         <p className="text-xs text-zinc-500 mt-3">
-          Orchestrator (Phase 2+) will surface start/pause/stop controls here. For now the workflow
-          row is a placeholder.
+          The orchestrator currently drives the decomposition phase (sys-design consensus).
+          Research and implementation phases land in later slices.
         </p>
       </section>
 

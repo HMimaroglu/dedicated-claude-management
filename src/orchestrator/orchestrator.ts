@@ -1,0 +1,98 @@
+import type { Db } from "@/lib/db";
+import { getDb } from "@/lib/db";
+import {
+  getWorkflow,
+  recordWorkflowEvent,
+  transitionWorkflow,
+  type WorkflowRecord,
+  type WorkflowState,
+} from "@/lib/workflows";
+import { advanceDecomposition } from "./phases/decomposition";
+import { overBudget } from "./budget";
+
+// Which states should the watcher attempt to advance on a tick? Terminal +
+// paused + waiting states are skipped.
+const ADVANCEABLE: WorkflowState[] = [
+  "idea_intake",
+  "decomposition",
+  "aspect_research",
+  "aspect_research_review",
+  "aspect_impl",
+  "aspect_audit",
+  "aspect_push",
+  "aspect_signoff",
+  "final_review",
+];
+
+export function canAdvance(wf: WorkflowRecord): boolean {
+  return ADVANCEABLE.includes(wf.state);
+}
+
+export interface AdvanceResult {
+  workflow_id: number;
+  from: WorkflowState;
+  to: WorkflowState;
+  reason: string;
+}
+
+// Advances a single workflow by one atomic unit of work. Callers are expected
+// to hold the per-workflow lock (see workflow-lock.ts).
+export async function advanceWorkflow(
+  workflow_id: number,
+  d?: Db
+): Promise<AdvanceResult | null> {
+  const db = d ?? getDb();
+  const wf = getWorkflow(workflow_id, db);
+  if (!wf) return null;
+  if (!canAdvance(wf)) return null;
+
+  // Hard stop if budget is exhausted.
+  if (overBudget(wf)) {
+    transitionWorkflow({
+      id: wf.id,
+      from: wf.state,
+      to: "error",
+      last_error: `budget exhausted ($${wf.spent_usd.toFixed(4)} / $${wf.budget_usd.toFixed(2)})`,
+      db,
+    });
+    return { workflow_id, from: wf.state, to: "error", reason: "budget exhausted" };
+  }
+
+  const fromState = wf.state;
+
+  // The idea_intake state is trivial: whenever the operator starts the
+  // workflow, we move into decomposition. (The /start route does this too;
+  // this handler covers restart/recovery paths.)
+  if (wf.state === "idea_intake") {
+    transitionWorkflow({
+      id: wf.id,
+      from: "idea_intake",
+      to: "decomposition",
+      consensus_round: 0,
+      db,
+    });
+    recordWorkflowEvent({
+      workflow_id: wf.id,
+      phase: "decomposition",
+      kind: "phase_entered",
+      db,
+    });
+    return { workflow_id, from: fromState, to: "decomposition", reason: "started" };
+  }
+
+  if (wf.state === "decomposition") {
+    const res = await advanceDecomposition(wf, db);
+    const to = res.newState ?? wf.state;
+    return { workflow_id, from: fromState, to: to as WorkflowState, reason: res.reason };
+  }
+
+  // Phases 4-6 land in later slices. For now we park any post-decomposition
+  // state rather than erroring out: the row stays advanceable but the tick
+  // becomes a no-op until we ship the next driver.
+  return {
+    workflow_id,
+    from: fromState,
+    to: fromState,
+    reason: `no driver for state '${fromState}' yet (future phase)`,
+  };
+}

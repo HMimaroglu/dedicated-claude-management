@@ -178,7 +178,8 @@ function migrate(d: Db) {
   //   1 = Phase 6: add instances.auto_restart, last_restart_at, next_restart_at
   //   2 = Multi-agent workflows: workflows, aspects, workflow_agents,
   //       workflow_events + projects.multi_agent_enabled column
-  const TARGET_VERSION = 2;
+  //   3 = WF Phase 3 decomposition: workflow_agents.last_text + workflows.consensus_round
+  const TARGET_VERSION = 3;
   if (userVersion < 1) {
     const existingCols = d
       .prepare("PRAGMA table_info(instances)")
@@ -274,6 +275,18 @@ function migrate(d: Db) {
       CREATE INDEX IF NOT EXISTS idx_workflow_events_workflow
         ON workflow_events(workflow_id, created_at);
     `);
+  }
+  if (userVersion < 3) {
+    const agentCols = d.prepare("PRAGMA table_info(workflow_agents)").all() as Array<{
+      name: string;
+    }>;
+    if (!agentCols.some((c) => c.name === "last_text")) {
+      d.exec("ALTER TABLE workflow_agents ADD COLUMN last_text TEXT");
+    }
+    const wfCols = d.prepare("PRAGMA table_info(workflows)").all() as Array<{ name: string }>;
+    if (!wfCols.some((c) => c.name === "consensus_round")) {
+      d.exec("ALTER TABLE workflows ADD COLUMN consensus_round INTEGER NOT NULL DEFAULT 0");
+    }
   }
   if (userVersion < TARGET_VERSION) {
     d.pragma(`user_version = ${TARGET_VERSION}`);

@@ -44,6 +44,7 @@ export interface WorkflowRecord {
   budget_usd: number;
   spent_usd: number;
   max_iterations_per_aspect: number;
+  consensus_round: number;
   model: string;
   last_error: string | null;
   created_at: number;
@@ -75,6 +76,7 @@ export interface WorkflowAgentRecord {
   total_cost_usd: number;
   total_input_tokens: number;
   total_output_tokens: number;
+  last_text: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -152,6 +154,7 @@ function rowToWorkflow(r: Record<string, unknown>): WorkflowRecord {
     budget_usd: r.budget_usd as number,
     spent_usd: r.spent_usd as number,
     max_iterations_per_aspect: r.max_iterations_per_aspect as number,
+    consensus_round: (r.consensus_round as number | null) ?? 0,
     model: r.model as string,
     last_error: (r.last_error as string | null) ?? null,
     created_at: r.created_at as number,
@@ -305,6 +308,153 @@ export function deleteWorkflow(id: number, d?: Db): boolean {
   const db = d ?? getDb();
   const r = db.prepare("DELETE FROM workflows WHERE id = ?").run(id);
   return r.changes > 0;
+}
+
+// Applies a structured state transition. Returns true if the UPDATE wrote a
+// row; false if the workflow was in a different state than expected (optimistic
+// concurrency).
+export function transitionWorkflow(opts: {
+  id: number;
+  from: WorkflowState | null; // null = unconditional
+  to: WorkflowState;
+  current_aspect_ord?: number | null;
+  plan_md?: string | null;
+  paused_at?: number | null;
+  completed_at?: number | null;
+  last_error?: string | null;
+  consensus_round?: number;
+  db?: Db;
+}): boolean {
+  const db = opts.db ?? getDb();
+  const now = Date.now();
+  const sets: string[] = ["state = ?", "updated_at = ?"];
+  const args: unknown[] = [opts.to, now];
+  if (opts.current_aspect_ord !== undefined) {
+    sets.push("current_aspect_ord = ?");
+    args.push(opts.current_aspect_ord);
+  }
+  if (opts.plan_md !== undefined) {
+    sets.push("plan_md = ?");
+    args.push(opts.plan_md);
+  }
+  if (opts.paused_at !== undefined) {
+    sets.push("paused_at = ?");
+    args.push(opts.paused_at);
+  }
+  if (opts.completed_at !== undefined) {
+    sets.push("completed_at = ?");
+    args.push(opts.completed_at);
+  }
+  if (opts.last_error !== undefined) {
+    sets.push("last_error = ?");
+    args.push(opts.last_error);
+  }
+  if (opts.consensus_round !== undefined) {
+    sets.push("consensus_round = ?");
+    args.push(opts.consensus_round);
+  }
+  let sql = `UPDATE workflows SET ${sets.join(", ")} WHERE id = ?`;
+  args.push(opts.id);
+  if (opts.from !== null) {
+    sql += " AND state = ?";
+    args.push(opts.from);
+  }
+  const r = db.prepare(sql).run(...(args as unknown[] as readonly unknown[]));
+  return r.changes > 0;
+}
+
+// Agents can produce very long responses; cap stored text to 100 KB to prevent
+// O(N²) bloat across rounds (we interpolate peer's last_text back into the
+// next task prompt) and to bound worst-case DB growth.
+export const AGENT_LAST_TEXT_MAX_CHARS = 100_000;
+
+export function setAgentLastText(
+  workflow_id: number,
+  role: Role,
+  text: string,
+  sdk_session_id?: string | null,
+  d?: Db
+): void {
+  const db = d ?? getDb();
+  const now = Date.now();
+  let stored = text;
+  if (stored.length > AGENT_LAST_TEXT_MAX_CHARS) {
+    const head = stored.slice(0, AGENT_LAST_TEXT_MAX_CHARS - 2_000);
+    const tail = stored.slice(stored.length - 2_000);
+    stored = `${head}\n\n[...truncated by DCM: original was ${text.length} chars...]\n\n${tail}`;
+  }
+  db.prepare(
+    `INSERT INTO workflow_agents (workflow_id, role, sdk_session_id, last_text, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(workflow_id, role) DO UPDATE SET
+       last_text = excluded.last_text,
+       sdk_session_id = COALESCE(excluded.sdk_session_id, workflow_agents.sdk_session_id),
+       updated_at = excluded.updated_at`
+  ).run(workflow_id, role, sdk_session_id ?? null, stored, now, now);
+}
+
+// Used when re-starting a workflow from paused; clears all agent sessions so
+// the next advance starts with fresh prompts rather than stale last_text.
+export function clearAgentLastText(workflow_id: number, d?: Db): void {
+  const db = d ?? getDb();
+  db.prepare(
+    `UPDATE workflow_agents SET last_text = NULL, sdk_session_id = NULL, updated_at = ? WHERE workflow_id = ?`
+  ).run(Date.now(), workflow_id);
+}
+
+export function getAgent(workflow_id: number, role: Role, d?: Db): WorkflowAgentRecord | null {
+  const db = d ?? getDb();
+  const row = db
+    .prepare("SELECT * FROM workflow_agents WHERE workflow_id = ? AND role = ?")
+    .get(workflow_id, role) as Record<string, unknown> | undefined;
+  if (!row) return null;
+  return {
+    id: row.id as number,
+    workflow_id: row.workflow_id as number,
+    role: row.role as Role,
+    sdk_session_id: (row.sdk_session_id as string | null) ?? null,
+    total_cost_usd: (row.total_cost_usd as number) ?? 0,
+    total_input_tokens: (row.total_input_tokens as number) ?? 0,
+    total_output_tokens: (row.total_output_tokens as number) ?? 0,
+    last_text: (row.last_text as string | null) ?? null,
+    created_at: row.created_at as number,
+    updated_at: row.updated_at as number,
+  };
+}
+
+export function insertAspects(
+  workflow_id: number,
+  aspects: Array<{
+    ord: number;
+    title: string;
+    description: string;
+    depends_on: number[];
+    acceptance_criteria?: string | null;
+  }>,
+  d?: Db
+): void {
+  const db = d ?? getDb();
+  const now = Date.now();
+  const stmt = db.prepare(
+    `INSERT INTO aspects (workflow_id, ord, title, description, depends_on, acceptance_criteria,
+                          state, loop_count, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?)`
+  );
+  const tx = db.transaction(() => {
+    for (const a of aspects) {
+      stmt.run(
+        workflow_id,
+        a.ord,
+        a.title,
+        a.description,
+        JSON.stringify(a.depends_on ?? []),
+        a.acceptance_criteria ?? null,
+        now,
+        now
+      );
+    }
+  });
+  tx();
 }
 
 export function setProjectMultiAgent(projectId: number, enabled: boolean, d?: Db): boolean {

@@ -14,4 +14,8 @@ export async function register() {
     const { startInstanceWatcher } = await import("./lib/instance-watcher");
     startInstanceWatcher();
   }
+  if (process.env.DCM_DISABLE_WORKFLOW_WATCHER !== "true") {
+    const { startWorkflowWatcher } = await import("./orchestrator/workflow-watcher");
+    startWorkflowWatcher();
+  }
 }
