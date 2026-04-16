@@ -12,7 +12,11 @@ export type AuditEvent =
   | "host.updated"
   | "host.deleted"
   | "host.probe_manual"
-  | "host.unquarantined";
+  | "host.unquarantined"
+  | "project.created"
+  | "project.updated"
+  | "project.deleted"
+  | "project.cloned";
 
 export function audit(opts: {
   event: AuditEvent;

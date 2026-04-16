@@ -113,6 +113,25 @@ function migrate(d: Db) {
     );
     CREATE INDEX IF NOT EXISTS idx_host_probes_host_time
       ON host_probes(host_id, probed_at DESC);
+
+    CREATE TABLE IF NOT EXISTS projects (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      description TEXT,
+      source_type TEXT NOT NULL CHECK (source_type IN ('git','local')),
+      git_url TEXT,
+      git_branch TEXT,
+      host_id INTEGER REFERENCES hosts(id) ON DELETE SET NULL,
+      path_on_host TEXT NOT NULL,
+      clone_status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (clone_status IN ('pending','cloning','ready','error','skipped')),
+      clone_error TEXT,
+      last_cloned_at INTEGER,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_projects_host ON projects(host_id);
+    CREATE INDEX IF NOT EXISTS idx_projects_status ON projects(clone_status);
   `);
 }
 

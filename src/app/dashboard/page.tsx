@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { hasAnyUser } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
 import { listHosts } from "@/lib/hosts";
+import { listProjects } from "@/lib/projects";
 import LogoutButton from "./LogoutButton";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +13,7 @@ export default async function DashboardPage() {
   const user = await getSessionUser();
   if (!user) redirect("/login");
   const hosts = listHosts();
+  const projects = listProjects();
   const online = hosts.filter((h) => h.status === "online").length;
   const quarantined = hosts.filter((h) => h.status === "quarantined").length;
 
@@ -23,6 +25,7 @@ export default async function DashboardPage() {
           <nav className="text-sm flex gap-4 text-zinc-400">
             <Link href="/dashboard" className="text-zinc-100">Dashboard</Link>
             <Link href="/hosts" className="hover:text-zinc-100">Hosts</Link>
+            <Link href="/projects" className="hover:text-zinc-100">Projects</Link>
           </nav>
         </div>
         <div className="flex items-center gap-3 text-sm">
@@ -30,13 +33,15 @@ export default async function DashboardPage() {
           <LogoutButton />
         </div>
       </header>
-      <div className="grid grid-cols-3 gap-3 mb-6">
+      <div className="grid grid-cols-4 gap-3 mb-6">
         <StatCard label="Hosts" value={hosts.length.toString()} />
         <StatCard label="Online" value={online.toString()} />
         <StatCard label="Quarantined" value={quarantined.toString()} tone={quarantined > 0 ? "warn" : undefined} />
+        <StatCard label="Projects" value={projects.length.toString()} />
       </div>
-      <p className="text-zinc-400 text-sm">
+      <p className="text-zinc-400 text-sm flex gap-4">
         <Link href="/hosts" className="underline decoration-dotted">Manage hosts →</Link>
+        <Link href="/projects" className="underline decoration-dotted">Manage projects →</Link>
       </p>
     </main>
   );
