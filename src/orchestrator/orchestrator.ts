@@ -8,6 +8,9 @@ import {
   type WorkflowState,
 } from "@/lib/workflows";
 import { advanceDecomposition } from "./phases/decomposition";
+import { advanceResearch } from "./phases/research";
+import { advanceResearchReview } from "./phases/research-review";
+import { advanceImpl } from "./phases/impl";
 import { overBudget } from "./budget";
 
 // Which states should the watcher attempt to advance on a tick? Terminal +
@@ -82,13 +85,23 @@ export async function advanceWorkflow(
 
   if (wf.state === "decomposition") {
     const res = await advanceDecomposition(wf, db);
-    const to = res.newState ?? wf.state;
-    return { workflow_id, from: fromState, to: to as WorkflowState, reason: res.reason };
+    return { workflow_id, from: fromState, to: (res.newState ?? wf.state) as WorkflowState, reason: res.reason };
+  }
+  if (wf.state === "aspect_research") {
+    const res = await advanceResearch(wf, db);
+    return { workflow_id, from: fromState, to: (res.newState ?? wf.state) as WorkflowState, reason: res.reason };
+  }
+  if (wf.state === "aspect_research_review") {
+    const res = await advanceResearchReview(wf, db);
+    return { workflow_id, from: fromState, to: (res.newState ?? wf.state) as WorkflowState, reason: res.reason };
+  }
+  if (wf.state === "aspect_impl") {
+    const res = await advanceImpl(wf, db);
+    return { workflow_id, from: fromState, to: (res.newState ?? wf.state) as WorkflowState, reason: res.reason };
   }
 
-  // Phases 4-6 land in later slices. For now we park any post-decomposition
-  // state rather than erroring out: the row stays advanceable but the tick
-  // becomes a no-op until we ship the next driver.
+  // Phases 5-6 (audit/push/signoff/final) land in later slices. For states
+  // not yet wired up, we park the workflow rather than erroring out.
   return {
     workflow_id,
     from: fromState,
