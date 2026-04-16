@@ -4,6 +4,7 @@ import { hasAnyUser } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
 import { getHost, recentProbes } from "@/lib/hosts";
 import HostDetailClient from "./HostDetailClient";
+import { Nav } from "../../Nav";
 
 export const dynamic = "force-dynamic";
 
@@ -26,11 +27,10 @@ export default async function HostDetail(
       <header className="flex justify-between items-center mb-8">
         <div className="flex items-center gap-4">
           <Link href="/dashboard" className="text-2xl font-semibold hover:text-zinc-300">DCM</Link>
-          <nav className="text-sm flex gap-4 text-zinc-400">
-            <Link href="/dashboard" className="hover:text-zinc-100">Dashboard</Link>
-            <Link href="/hosts" className="hover:text-zinc-100">Hosts</Link>
-            <span className="text-zinc-100 font-mono">/ {host.name}</span>
-          </nav>
+          <div className="flex items-center gap-4">
+            <Nav current="hosts" />
+            <span className="text-zinc-100 font-mono text-sm">/ {host.name}</span>
+          </div>
         </div>
         <span className="text-sm text-zinc-400">{user.username}</span>
       </header>

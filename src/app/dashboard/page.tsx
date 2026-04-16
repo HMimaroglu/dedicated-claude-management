@@ -5,6 +5,7 @@ import { getSessionUser } from "@/lib/session";
 import { computeDashboard } from "@/lib/dashboard-metrics";
 import LogoutButton from "./LogoutButton";
 import Sparkline from "./Sparkline";
+import { Nav } from "../Nav";
 
 export const dynamic = "force-dynamic";
 
@@ -21,12 +22,7 @@ export default async function DashboardPage() {
       <header className="flex justify-between items-center mb-8">
         <div className="flex items-center gap-4">
           <h1 className="text-2xl font-semibold">DCM</h1>
-          <nav className="text-sm flex gap-4 text-zinc-400">
-            <Link href="/dashboard" className="text-zinc-100">Dashboard</Link>
-            <Link href="/hosts" className="hover:text-zinc-100">Hosts</Link>
-            <Link href="/projects" className="hover:text-zinc-100">Projects</Link>
-            <Link href="/instances" className="hover:text-zinc-100">Instances</Link>
-          </nav>
+          <Nav current="dashboard" />
         </div>
         <div className="flex items-center gap-3 text-sm">
           <span className="text-zinc-400">{user.username}</span>
@@ -109,11 +105,6 @@ export default async function DashboardPage() {
         )}
       </section>
 
-      <p className="text-zinc-500 text-xs mt-6 flex gap-4">
-        <Link href="/hosts" className="underline decoration-dotted">Hosts</Link>
-        <Link href="/projects" className="underline decoration-dotted">Projects</Link>
-        <Link href="/instances" className="underline decoration-dotted">Instances</Link>
-      </p>
     </main>
   );
 }
