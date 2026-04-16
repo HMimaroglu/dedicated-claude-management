@@ -21,18 +21,19 @@ afterEach(() => {
 });
 
 describe("computeDashboard", () => {
-  it("returns zero-remote + controller baseline when nothing exists", () => {
-    const { totals, hosts, local } = computeDashboard(db);
+  it("returns zero-remote + controller baseline when nothing exists", async () => {
+    const { totals, hosts, local } = await computeDashboard(db);
     expect(hosts).toHaveLength(0);
     expect(totals.hosts).toBe(0);
     expect(totals.instances).toBe(0);
-    // Controller always contributes its own cores + RAM to the totals.
     expect(local.cores).toBeGreaterThan(0);
+    expect(local.cpu_pct).toBeGreaterThanOrEqual(0);
+    expect(local.cpu_pct).toBeLessThanOrEqual(100);
     expect(totals.cores_total).toBe(local.cores);
     expect(totals.ram_total_mb).toBe(local.mem_total_mb);
   });
 
-  it("aggregates cores, RAM, and instance counts", () => {
+  it("aggregates cores, RAM, and instance counts", async () => {
     const h1 = createHost(
       {
         name: "h1",
@@ -89,12 +90,10 @@ describe("computeDashboard", () => {
     );
     const inst = createInstanceRow({ name: "i", project_id: p.id }, db);
     setInstanceStatus(inst.id, "running", {}, db);
-    const { totals, hosts, local } = computeDashboard(db);
+    const { totals, hosts, local } = await computeDashboard(db);
     expect(totals.hosts).toBe(2);
     expect(totals.instances).toBe(1);
     expect(totals.running).toBe(1);
-    // Controller contributes too — hosts are 8+16 cores, RAM 16000+32000 MB
-    // used 8000+16000. Totals include local as well.
     expect(totals.cores_total).toBe(24 + local.cores);
     expect(totals.ram_total_mb).toBe(48000 + local.mem_total_mb);
     expect(totals.ram_used_mb).toBe(24000 + local.mem_used_mb);
@@ -102,7 +101,7 @@ describe("computeDashboard", () => {
     expect(hosts).toHaveLength(2);
   });
 
-  it("skips remote hosts without a successful probe in RAM totals (controller always counted)", () => {
+  it("skips remote hosts without a successful probe in RAM totals (controller always counted)", async () => {
     createHost(
       {
         name: "noprobe",
@@ -114,11 +113,8 @@ describe("computeDashboard", () => {
       },
       db
     );
-    const { totals, local } = computeDashboard(db);
-    // The unprobed remote host doesn't contribute to RAM; only the
-    // controller's own RAM shows up in the total.
+    const { totals, local } = await computeDashboard(db);
     expect(totals.ram_total_mb).toBe(local.mem_total_mb);
-    // Cores count the host's declared 4 + the controller's own cores.
     expect(totals.cores_total).toBe(4 + local.cores);
   });
 });

@@ -44,9 +44,10 @@ export interface InstanceRecord {
 export interface InstanceCreateInput {
   name: string;
   project_id: number;
-  // host_id defaults to project.host_id; used mainly for tests + future Phase 7
-  // scheduler that may pick a different host from the project's own.
-  host_id?: number;
+  // Defaults to project.host_id when omitted. `null` means "local/
+  // controller" — operator can pick local even if the project has a remote
+  // host set by default.
+  host_id?: number | null;
   requirements?: InstanceRequirements;
 }
 

@@ -22,7 +22,9 @@ export async function GET(req: Request) {
 const CreateSchema = z.object({
   name: z.string().min(1).max(64),
   project_id: z.number().int().positive(),
-  host_id: z.number().int().positive().optional(),
+  // null = local/controller (inherits from project). optional = inherit from
+  // project.host_id. Both are accepted over the wire.
+  host_id: z.number().int().positive().nullable().optional(),
   requirements: z
     .object({
       gpu: z.boolean().optional(),

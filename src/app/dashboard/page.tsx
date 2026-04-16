@@ -14,10 +14,9 @@ export default async function DashboardPage() {
   const user = await getSessionUser();
   if (!user) redirect("/login");
 
-  const { totals, hosts, local } = computeDashboard();
+  const { totals, hosts, local } = await computeDashboard();
   const memUsedPct = totals.ram_total_mb > 0 ? (totals.ram_used_mb / totals.ram_total_mb) * 100 : null;
   const localMemPct = local.mem_total_mb > 0 ? (local.mem_used_mb / local.mem_total_mb) * 100 : 0;
-  const localLoadPct = Math.min(100, (local.load_1m / Math.max(1, local.cores)) * 100);
 
   return (
     <main className="max-w-5xl mx-auto pt-12 px-4 pb-16">
@@ -68,16 +67,16 @@ export default async function DashboardPage() {
             </div>
             <span className="px-2 py-0.5 rounded text-xs bg-emerald-900 text-emerald-300">online</span>
           </div>
-          <div className="grid grid-cols-4 gap-3 text-sm">
-            <Stat label="CPU load (1m)" value={local.load_1m.toFixed(2)} />
+          <div className="grid grid-cols-3 gap-3 text-sm">
             <Stat
-              label="CPU used"
-              value={`${localLoadPct.toFixed(0)}%`}
-              bar={localLoadPct}
-              tone={localLoadPct > 80 ? "warn" : "ok"}
+              label="CPU"
+              value={`${local.cpu_pct.toFixed(0)}%`}
+              bar={local.cpu_pct}
+              sub={`load ${local.load_1m.toFixed(2)}`}
+              tone={local.cpu_pct > 80 ? "warn" : "ok"}
             />
             <Stat
-              label="RAM used"
+              label="Memory"
               value={`${localMemPct.toFixed(0)}%`}
               bar={localMemPct}
               sub={`${Math.round(local.mem_used_mb / 1024)} / ${Math.round(local.mem_total_mb / 1024)} GB`}
