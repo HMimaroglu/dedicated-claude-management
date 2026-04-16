@@ -11,6 +11,9 @@ import { advanceDecomposition } from "./phases/decomposition";
 import { advanceResearch } from "./phases/research";
 import { advanceResearchReview } from "./phases/research-review";
 import { advanceImpl } from "./phases/impl";
+import { advanceAudit } from "./phases/audit";
+import { advancePush, advanceSignoff } from "./phases/push-signoff";
+import { advanceFinalReview } from "./phases/final-review";
 import { overBudget } from "./budget";
 
 // Which states should the watcher attempt to advance on a tick? Terminal +
@@ -99,13 +102,27 @@ export async function advanceWorkflow(
     const res = await advanceImpl(wf, db);
     return { workflow_id, from: fromState, to: (res.newState ?? wf.state) as WorkflowState, reason: res.reason };
   }
+  if (wf.state === "aspect_audit") {
+    const res = await advanceAudit(wf, db);
+    return { workflow_id, from: fromState, to: (res.newState ?? wf.state) as WorkflowState, reason: res.reason };
+  }
+  if (wf.state === "aspect_push") {
+    const res = advancePush(wf, db);
+    return { workflow_id, from: fromState, to: (res.newState ?? wf.state) as WorkflowState, reason: res.reason };
+  }
+  if (wf.state === "aspect_signoff") {
+    const res = await advanceSignoff(wf, db);
+    return { workflow_id, from: fromState, to: (res.newState ?? wf.state) as WorkflowState, reason: res.reason };
+  }
+  if (wf.state === "final_review") {
+    const res = await advanceFinalReview(wf, db);
+    return { workflow_id, from: fromState, to: (res.newState ?? wf.state) as WorkflowState, reason: res.reason };
+  }
 
-  // Phases 5-6 (audit/push/signoff/final) land in later slices. For states
-  // not yet wired up, we park the workflow rather than erroring out.
   return {
     workflow_id,
     from: fromState,
     to: fromState,
-    reason: `no driver for state '${fromState}' yet (future phase)`,
+    reason: `no driver for state '${fromState}'`,
   };
 }
