@@ -7,7 +7,12 @@ export type AuditEvent =
   | "user.login_failed"
   | "user.logout"
   | "session.created"
-  | "session.destroyed";
+  | "session.destroyed"
+  | "host.created"
+  | "host.updated"
+  | "host.deleted"
+  | "host.probe_manual"
+  | "host.unquarantined";
 
 export function audit(opts: {
   event: AuditEvent;

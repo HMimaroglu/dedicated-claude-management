@@ -74,6 +74,45 @@ function migrate(d: Db) {
       created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);
+
+    CREATE TABLE IF NOT EXISTS hosts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      address TEXT NOT NULL,
+      port INTEGER NOT NULL DEFAULT 22,
+      ssh_user TEXT NOT NULL,
+      auth_method TEXT NOT NULL CHECK (auth_method IN ('privkey', 'agent')),
+      enc_privkey TEXT,
+      enc_passphrase TEXT,
+      known_host_key TEXT,
+      capabilities TEXT NOT NULL DEFAULT '{}',
+      labels TEXT NOT NULL DEFAULT '[]',
+      status TEXT NOT NULL DEFAULT 'unknown'
+        CHECK (status IN ('unknown','online','offline','quarantined','error')),
+      consecutive_failures INTEGER NOT NULL DEFAULT 0,
+      last_probe_at INTEGER,
+      last_probe_error TEXT,
+      last_latency_ms INTEGER,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_hosts_status ON hosts(status);
+
+    CREATE TABLE IF NOT EXISTS host_probes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      host_id INTEGER NOT NULL REFERENCES hosts(id) ON DELETE CASCADE,
+      probed_at INTEGER NOT NULL,
+      latency_ms INTEGER,
+      success INTEGER NOT NULL,
+      error TEXT,
+      cpu_load_1m REAL,
+      mem_total_mb INTEGER,
+      mem_used_mb INTEGER,
+      disk_used_pct INTEGER,
+      gpu_info TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_host_probes_host_time
+      ON host_probes(host_id, probed_at DESC);
   `);
 }
 
