@@ -1,6 +1,6 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import type { InstanceRecord } from "@/lib/instances";
 import type { ProjectRecord } from "@/lib/projects";
 import type { HostRecord } from "@/lib/hosts";
@@ -16,6 +16,7 @@ export default function InstanceClient({
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  const [expanded, setExpanded] = useState(true);
 
   function call(path: string, method = "POST", body?: unknown) {
     start(async () => {
@@ -59,12 +60,22 @@ export default function InstanceClient({
     <div className="space-y-6">
       <section className="bg-zinc-900 border border-zinc-800 rounded-md p-4">
         <div className="flex justify-between items-start mb-3">
-          <div>
-            <div className="text-xl font-semibold font-mono">{instance.name}</div>
-            <div className="text-sm text-zinc-400 font-mono mt-1">tmux session: {instance.tmux_session}</div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setExpanded((v) => !v)}
+              aria-label={expanded ? "Collapse details" : "Expand details"}
+              className="text-zinc-400 hover:text-zinc-100 font-mono text-sm select-none w-5"
+            >
+              {expanded ? "▾" : "▸"}
+            </button>
+            <div>
+              <div className="text-xl font-semibold font-mono">{instance.name}</div>
+              <div className="text-sm text-zinc-400 font-mono mt-1">tmux session: {instance.tmux_session}</div>
+            </div>
           </div>
           <StatusPill status={instance.status} />
         </div>
+        {expanded && (<>
         <div className="grid grid-cols-2 gap-3 text-sm">
           <Stat label="Project" value={project?.name ?? "—"} />
           <Stat
@@ -122,6 +133,8 @@ export default function InstanceClient({
             Delete
           </button>
         </div>
+        </>
+        )}
       </section>
     </div>
   );

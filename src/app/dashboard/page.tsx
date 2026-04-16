@@ -5,6 +5,7 @@ import { getSessionUser } from "@/lib/session";
 import { computeDashboard } from "@/lib/dashboard-metrics";
 import LogoutButton from "./LogoutButton";
 import Sparkline from "./Sparkline";
+import AutoRefresh from "./AutoRefresh";
 import { Nav } from "../Nav";
 
 export const dynamic = "force-dynamic";
@@ -20,6 +21,7 @@ export default async function DashboardPage() {
 
   return (
     <main className="max-w-5xl mx-auto pt-12 px-4 pb-16">
+      <AutoRefresh intervalMs={3000} />
       <header className="flex justify-between items-center mb-8">
         <div className="flex items-center gap-4">
           <h1 className="text-2xl font-semibold">DCM</h1>

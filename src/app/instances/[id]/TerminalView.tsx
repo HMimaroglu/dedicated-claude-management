@@ -5,8 +5,38 @@ import type { InstanceRecord } from "@/lib/instances";
 
 export default function TerminalView({ instance }: { instance: InstanceRecord }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const fitRef = useRef<{ fit: () => void } | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
   const [status, setStatus] = useState<"idle" | "connecting" | "connected" | "closed" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [fullscreen, setFullscreen] = useState(false);
+
+  // Refit + push resize when fullscreen toggles so the pty knows the new size.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        fitRef.current?.fit();
+      } catch {
+        // ignore
+      }
+      const ws = wsRef.current;
+      // We don't know the Terminal object here, but we kick an event the
+      // inner useEffect's window-resize handler already listens for.
+      window.dispatchEvent(new Event("resize"));
+      void ws;
+    }, 60);
+    return () => clearTimeout(t);
+  }, [fullscreen]);
+
+  // Escape exits fullscreen.
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFullscreen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fullscreen]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -45,6 +75,7 @@ export default function TerminalView({ instance }: { instance: InstanceRecord })
       const fit = new FitAddon();
       term.loadAddon(fit);
       term.open(containerRef.current!);
+      fitRef.current = fit;
       try {
         fit.fit();
       } catch {
@@ -54,6 +85,7 @@ export default function TerminalView({ instance }: { instance: InstanceRecord })
       const wsUrl = buildWsUrl(token);
       const ws = new WebSocket(wsUrl);
       ws.binaryType = "arraybuffer";
+      wsRef.current = ws;
 
       ws.onopen = () => {
         setStatus("connected");
@@ -113,15 +145,45 @@ export default function TerminalView({ instance }: { instance: InstanceRecord })
   }, [instance.id]);
 
   return (
-    <div className="bg-zinc-950 border border-zinc-800 rounded-md overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800 text-xs">
-        <span className="text-zinc-500">tmux attach → {instance.tmux_session}</span>
-        <span className="text-zinc-400">
-          {status}
-          {error ? ` — ${error}` : ""}
+    <div
+      className={
+        fullscreen
+          ? "fixed inset-0 z-50 bg-zinc-950 flex flex-col"
+          : "bg-zinc-950 border border-zinc-800 rounded-md overflow-hidden flex flex-col"
+      }
+    >
+      <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800 text-xs shrink-0">
+        <span className="text-zinc-500 font-mono">
+          tmux attach → {instance.tmux_session}
         </span>
+        <div className="flex items-center gap-3">
+          <span
+            className={
+              status === "connected"
+                ? "text-emerald-400"
+                : status === "error"
+                  ? "text-red-400"
+                  : status === "closed"
+                    ? "text-zinc-500"
+                    : "text-zinc-400"
+            }
+          >
+            {status}
+            {error ? ` — ${error}` : ""}
+          </span>
+          <button
+            onClick={() => setFullscreen((v) => !v)}
+            className="text-zinc-400 hover:text-zinc-100 px-1.5 py-0.5 rounded border border-zinc-800"
+            title={fullscreen ? "Exit fullscreen (Esc)" : "Fullscreen"}
+          >
+            {fullscreen ? "⤢ exit" : "⤢ fullscreen"}
+          </button>
+        </div>
       </div>
-      <div ref={containerRef} className="h-96" />
+      <div
+        ref={containerRef}
+        className={fullscreen ? "flex-1 min-h-0" : "h-[32rem]"}
+      />
     </div>
   );
 }

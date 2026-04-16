@@ -121,16 +121,10 @@ async function handleConnection(ws: WebSocket, rawUrl: string): Promise<void> {
     ws.close(1011, "instance gone");
     return;
   }
-  // Local instances (host_id=null) use the controller's own tmux. In that
-  // case we'd need a PTY bridge (node-pty) which isn't wired yet. Close with
-  // a clear message; the operator can `tmux attach -t dcm-<id>` from a local
-  // shell on the controller in the meantime.
+  // Local instances (host_id = null) — attach to the controller's tmux via
+  // node-pty. Runs in the same process as the WS server.
   if (instance.host_id === null) {
-    safeSendText(
-      ws,
-      `\r\n[dcm] live terminal for local/controller instances is not yet wired. Use 'tmux attach -t ${instance.tmux_session}' from a shell on the controller.\r\n`
-    );
-    ws.close(1011, "local terminal not supported");
+    await bridgeLocalPty(ws, instance.tmux_session);
     return;
   }
   const host = getHost(instance.host_id);
@@ -243,6 +237,106 @@ function safeSendText(ws: WebSocket, text: string): void {
   } catch {
     // ignore
   }
+}
+
+// Local tmux bridge. Spawns `tmux attach -t <session>` in a pty (node-pty)
+// and forwards bytes/resizes between the browser and the pty. Handles the
+// common failure modes: tmux missing, session gone, node-pty not built.
+async function bridgeLocalPty(ws: WebSocket, sessionName: string): Promise<void> {
+  // Lazy-load node-pty so a broken install doesn't crash the WS server at
+  // boot — only the affected connection errors out.
+  let ptyLib: typeof import("node-pty");
+  try {
+    ptyLib = await import("node-pty");
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    safeSendText(
+      ws,
+      `\r\n[dcm] node-pty failed to load: ${msg}\r\n` +
+        `Try: cd dcm && npm rebuild node-pty\r\n`
+    );
+    ws.close(1011, "pty unavailable");
+    return;
+  }
+
+  let pty: import("node-pty").IPty;
+  try {
+    pty = ptyLib.spawn("tmux", ["attach", "-t", sessionName], {
+      name: "xterm-256color",
+      cols: 120,
+      rows: 30,
+      cwd: process.env.HOME ?? process.cwd(),
+      env: process.env,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    safeSendText(ws, `\r\n[dcm] tmux attach failed: ${msg}\r\n`);
+    ws.close(1011, "tmux attach failed");
+    return;
+  }
+
+  let closed = false;
+  const cleanup = (): void => {
+    if (closed) return;
+    closed = true;
+    try {
+      pty.kill();
+    } catch {
+      // ignore
+    }
+  };
+
+  const BACKPRESSURE_LIMIT = 1 << 20; // 1 MiB
+  pty.onData((d: string) => {
+    if (ws.readyState !== ws.OPEN) return;
+    ws.send(Buffer.from(d, "utf8"), { binary: true });
+    if (ws.bufferedAmount > BACKPRESSURE_LIMIT) {
+      pty.pause();
+      const flush = (): void => {
+        if (ws.bufferedAmount < BACKPRESSURE_LIMIT / 2) pty.resume();
+        else setTimeout(flush, 25);
+      };
+      flush();
+    }
+  });
+  pty.onExit(({ exitCode }) => {
+    safeSendText(ws, `\r\n[dcm] tmux attach exited ${exitCode}\r\n`);
+    cleanup();
+    try {
+      ws.close(1000, "pty exited");
+    } catch {
+      // ignore
+    }
+  });
+
+  ws.on("message", (msg, isBinary) => {
+    if (closed) return;
+    if (isBinary) {
+      pty.write((msg as Buffer).toString("utf8"));
+      return;
+    }
+    const text = typeof msg === "string" ? msg : (msg as Buffer).toString("utf8");
+    try {
+      const parsed = JSON.parse(text) as { type?: string; data?: string; cols?: number; rows?: number };
+      if (parsed.type === "input" && typeof parsed.data === "string") {
+        pty.write(parsed.data);
+      } else if (
+        parsed.type === "resize" &&
+        Number.isInteger(parsed.cols) &&
+        Number.isInteger(parsed.rows) &&
+        (parsed.cols as number) > 0 &&
+        (parsed.rows as number) > 0 &&
+        (parsed.cols as number) < 1000 &&
+        (parsed.rows as number) < 1000
+      ) {
+        pty.resize(parsed.cols as number, parsed.rows as number);
+      }
+    } catch {
+      pty.write(text);
+    }
+  });
+  ws.on("close", cleanup);
+  ws.on("error", cleanup);
 }
 
 export const WS_PORT = PORT;
