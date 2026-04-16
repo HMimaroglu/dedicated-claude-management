@@ -29,7 +29,10 @@ export interface InstanceRecord {
   pid: number | null;
   spawn_error: string | null;
   requirements: InstanceRequirements;
+  auto_restart: boolean;
   restart_count: number;
+  last_restart_at: number | null;
+  next_restart_at: number | null;
   spawned_at: number | null;
   stopped_at: number | null;
   last_check_at: number | null;
@@ -46,12 +49,17 @@ export interface InstanceCreateInput {
   requirements?: InstanceRequirements;
 }
 
-interface InstanceRow extends Omit<InstanceRecord, "requirements"> {
+interface InstanceRow extends Omit<InstanceRecord, "requirements" | "auto_restart"> {
   requirements: string;
+  auto_restart: number;
 }
 
 function rowToInstance(r: InstanceRow): InstanceRecord {
-  return { ...r, requirements: JSON.parse(r.requirements || "{}") as InstanceRequirements };
+  return {
+    ...r,
+    auto_restart: r.auto_restart === 1,
+    requirements: JSON.parse(r.requirements || "{}") as InstanceRequirements,
+  };
 }
 
 const INSTANCE_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$/;
@@ -227,12 +235,80 @@ export async function spawnInstance(instanceId: number, d?: Db): Promise<SpawnRe
       setInstanceStatus(instanceId, "crashed", { spawn_error: err, stopped_at: Date.now() }, db);
       return { success: false, stderr: check.stderr, error: err };
     }
-    setInstanceStatus(instanceId, "running", { spawned_at: Date.now(), spawn_error: null }, db);
+    // Capture the claude PID. Since we launched with `exec claude …`, the
+    // tmux pane PID == the claude PID.
+    let pid: number | null = null;
+    try {
+      const pidRes = await execOnce(
+        conn,
+        `tmux list-panes -t ${shQuote(inst.tmux_session)} -F '#{pane_pid}' | head -n1`,
+        { timeoutMs: 5000 }
+      );
+      const parsed = parseInt(pidRes.stdout.trim(), 10);
+      if (Number.isFinite(parsed) && parsed > 0) pid = parsed;
+    } catch {
+      // best-effort
+    }
+    setInstanceStatus(
+      instanceId,
+      "running",
+      { spawned_at: Date.now(), spawn_error: null, pid },
+      db
+    );
     return { success: true, stderr: res.stderr, error: null };
   } catch (e) {
     const msg = e instanceof SshError || e instanceof Error ? e.message : String(e);
     setInstanceStatus(instanceId, "error", { spawn_error: msg.slice(0, 512) }, db);
     return { success: false, stderr: "", error: msg };
+  } finally {
+    try {
+      conn.end();
+    } catch {
+      // ignore
+    }
+  }
+}
+
+// Sends SIGSTOP to the claude process running inside the tmux pane. We resolve
+// the pid via tmux (defending against stale DB pid). The pane-pid equals the
+// claude pid because we launched with `exec claude …`.
+export async function pauseInstance(instanceId: number, d?: Db): Promise<{ ok: boolean; error: string | null }> {
+  return signalInstance(instanceId, "STOP", "paused", d);
+}
+
+export async function resumeInstance(instanceId: number, d?: Db): Promise<{ ok: boolean; error: string | null }> {
+  return signalInstance(instanceId, "CONT", "running", d);
+}
+
+async function signalInstance(
+  instanceId: number,
+  signal: "STOP" | "CONT",
+  nextStatus: InstanceStatus,
+  d?: Db
+): Promise<{ ok: boolean; error: string | null }> {
+  const db = d ?? getDb();
+  const inst = getInstance(instanceId, db);
+  if (!inst) throw new Error("instance not found");
+  const host = getHost(inst.host_id, db);
+  if (!host) throw new Error("host not found");
+
+  const conn = await openSession(host);
+  try {
+    // Resolve pid via tmux and signal it in one hop to avoid TOCTOU.
+    const cmd =
+      `PID=$(tmux list-panes -t ${shQuote(inst.tmux_session)} -F '#{pane_pid}' 2>/dev/null | head -n1); ` +
+      `if [ -z "$PID" ]; then echo NOSESSION >&2; exit 2; fi; kill -${signal} "$PID"`;
+    const res = await execOnce(conn, cmd, { timeoutMs: 5000 });
+    if (res.code !== 0) {
+      const msg =
+        res.stderr.trim() || `signal command exited ${res.code}`;
+      return { ok: false, error: msg.slice(0, 200) };
+    }
+    setInstanceStatus(instanceId, nextStatus, {}, db);
+    return { ok: true, error: null };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: msg };
   } finally {
     try {
       conn.end();

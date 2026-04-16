@@ -20,7 +20,10 @@ export type AuditEvent =
   | "instance.created"
   | "instance.spawned"
   | "instance.killed"
-  | "instance.deleted";
+  | "instance.deleted"
+  | "instance.paused"
+  | "instance.resumed"
+  | "instance.auto_restart_toggled";
 
 export function audit(opts: {
   event: AuditEvent;

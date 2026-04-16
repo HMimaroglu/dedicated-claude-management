@@ -10,4 +10,8 @@ export async function register() {
     const { startWsServer } = await import("./lib/ws-server");
     startWsServer();
   }
+  if (process.env.DCM_DISABLE_INSTANCE_WATCHER !== "true") {
+    const { startInstanceWatcher } = await import("./lib/instance-watcher");
+    startInstanceWatcher();
+  }
 }

@@ -33,6 +33,8 @@ export function _resetForTests(): void {
 }
 
 function migrate(d: Db) {
+  const userVersion = (d.pragma("user_version", { simple: true }) as number) ?? 0;
+
   d.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -144,7 +146,10 @@ function migrate(d: Db) {
       pid INTEGER,
       spawn_error TEXT,
       requirements TEXT NOT NULL DEFAULT '{}',
+      auto_restart INTEGER NOT NULL DEFAULT 1,
       restart_count INTEGER NOT NULL DEFAULT 0,
+      last_restart_at INTEGER,
+      next_restart_at INTEGER,
       spawned_at INTEGER,
       stopped_at INTEGER,
       last_check_at INTEGER,
@@ -167,6 +172,29 @@ function migrate(d: Db) {
     CREATE INDEX IF NOT EXISTS idx_terminal_tickets_token ON terminal_tickets(token_hash);
     CREATE INDEX IF NOT EXISTS idx_terminal_tickets_expires ON terminal_tickets(expires_at);
   `);
+
+  // Schema version history:
+  //   0 = initial (Phases 1-5)
+  //   1 = Phase 6: add instances.auto_restart, last_restart_at, next_restart_at
+  const TARGET_VERSION = 1;
+  if (userVersion < 1) {
+    const existingCols = d
+      .prepare("PRAGMA table_info(instances)")
+      .all() as Array<{ name: string }>;
+    const names = new Set(existingCols.map((c) => c.name));
+    if (!names.has("auto_restart")) {
+      d.exec("ALTER TABLE instances ADD COLUMN auto_restart INTEGER NOT NULL DEFAULT 1");
+    }
+    if (!names.has("last_restart_at")) {
+      d.exec("ALTER TABLE instances ADD COLUMN last_restart_at INTEGER");
+    }
+    if (!names.has("next_restart_at")) {
+      d.exec("ALTER TABLE instances ADD COLUMN next_restart_at INTEGER");
+    }
+  }
+  if (userVersion < TARGET_VERSION) {
+    d.pragma(`user_version = ${TARGET_VERSION}`);
+  }
 }
 
 export function hasAnyUser(d: Db = getDb()): boolean {
