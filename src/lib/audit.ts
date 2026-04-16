@@ -16,7 +16,11 @@ export type AuditEvent =
   | "project.created"
   | "project.updated"
   | "project.deleted"
-  | "project.cloned";
+  | "project.cloned"
+  | "instance.created"
+  | "instance.spawned"
+  | "instance.killed"
+  | "instance.deleted";
 
 export function audit(opts: {
   event: AuditEvent;

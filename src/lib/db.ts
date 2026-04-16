@@ -132,6 +132,28 @@ function migrate(d: Db) {
     );
     CREATE INDEX IF NOT EXISTS idx_projects_host ON projects(host_id);
     CREATE INDEX IF NOT EXISTS idx_projects_status ON projects(clone_status);
+
+    CREATE TABLE IF NOT EXISTS instances (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
+      host_id INTEGER NOT NULL REFERENCES hosts(id) ON DELETE RESTRICT,
+      tmux_session TEXT NOT NULL UNIQUE,
+      status TEXT NOT NULL DEFAULT 'starting'
+        CHECK (status IN ('starting','running','paused','stopped','crashed','error')),
+      pid INTEGER,
+      spawn_error TEXT,
+      requirements TEXT NOT NULL DEFAULT '{}',
+      restart_count INTEGER NOT NULL DEFAULT 0,
+      spawned_at INTEGER,
+      stopped_at INTEGER,
+      last_check_at INTEGER,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_instances_host ON instances(host_id);
+    CREATE INDEX IF NOT EXISTS idx_instances_status ON instances(status);
+    CREATE INDEX IF NOT EXISTS idx_instances_project ON instances(project_id);
   `);
 }
 

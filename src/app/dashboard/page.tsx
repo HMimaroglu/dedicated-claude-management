@@ -4,6 +4,7 @@ import { hasAnyUser } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
 import { listHosts } from "@/lib/hosts";
 import { listProjects } from "@/lib/projects";
+import { listInstances } from "@/lib/instances";
 import LogoutButton from "./LogoutButton";
 
 export const dynamic = "force-dynamic";
@@ -14,8 +15,10 @@ export default async function DashboardPage() {
   if (!user) redirect("/login");
   const hosts = listHosts();
   const projects = listProjects();
+  const instances = listInstances();
   const online = hosts.filter((h) => h.status === "online").length;
   const quarantined = hosts.filter((h) => h.status === "quarantined").length;
+  const running = instances.filter((i) => i.status === "running").length;
 
   return (
     <main className="max-w-3xl mx-auto pt-12 px-4">
@@ -26,6 +29,7 @@ export default async function DashboardPage() {
             <Link href="/dashboard" className="text-zinc-100">Dashboard</Link>
             <Link href="/hosts" className="hover:text-zinc-100">Hosts</Link>
             <Link href="/projects" className="hover:text-zinc-100">Projects</Link>
+            <Link href="/instances" className="hover:text-zinc-100">Instances</Link>
           </nav>
         </div>
         <div className="flex items-center gap-3 text-sm">
@@ -33,15 +37,17 @@ export default async function DashboardPage() {
           <LogoutButton />
         </div>
       </header>
-      <div className="grid grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-5 gap-3 mb-6">
         <StatCard label="Hosts" value={hosts.length.toString()} />
         <StatCard label="Online" value={online.toString()} />
         <StatCard label="Quarantined" value={quarantined.toString()} tone={quarantined > 0 ? "warn" : undefined} />
         <StatCard label="Projects" value={projects.length.toString()} />
+        <StatCard label="Running" value={`${running}/${instances.length}`} />
       </div>
       <p className="text-zinc-400 text-sm flex gap-4">
-        <Link href="/hosts" className="underline decoration-dotted">Manage hosts →</Link>
-        <Link href="/projects" className="underline decoration-dotted">Manage projects →</Link>
+        <Link href="/hosts" className="underline decoration-dotted">Hosts →</Link>
+        <Link href="/projects" className="underline decoration-dotted">Projects →</Link>
+        <Link href="/instances" className="underline decoration-dotted">Instances →</Link>
       </p>
     </main>
   );
