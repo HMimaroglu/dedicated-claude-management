@@ -72,23 +72,24 @@ export default function ProjectsClient({
 }
 
 function StatusPill({ status }: { status: ProjectRecord["clone_status"] }) {
+  // "skipped" is an internal value meaning "source_type=local, nothing to
+  // clone". Display it as "ready" so the UI matches how the user thinks
+  // about the project — the files are on disk and usable.
+  const label = status === "skipped" ? "ready" : status;
   const color =
-    status === "ready" ? "bg-emerald-900 text-emerald-300" :
+    status === "ready" || status === "skipped" ? "bg-emerald-900 text-emerald-300" :
     status === "error" ? "bg-red-900 text-red-300" :
     status === "cloning" ? "bg-blue-900 text-blue-300" :
-    status === "skipped" ? "bg-zinc-700 text-zinc-300" :
     "bg-yellow-900 text-yellow-300";
-  return <span className={`px-2 py-0.5 rounded text-xs ${color}`}>{status}</span>;
+  return <span className={`px-2 py-0.5 rounded text-xs ${color}`}>{label}</span>;
 }
 
-function AddForm({ hosts, onDone }: { hosts: HostRecord[]; onDone: () => void }) {
+function AddForm({ onDone }: { hosts: HostRecord[]; onDone: () => void }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [sourceType, setSourceType] = useState<"git" | "local">("git");
   const [gitUrl, setGitUrl] = useState("");
   const [gitBranch, setGitBranch] = useState("");
-  // "" = local/controller (null on the wire). Otherwise numeric host id.
-  const [hostId, setHostId] = useState<string>("");
   const [pathOnHost, setPathOnHost] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -96,11 +97,13 @@ function AddForm({ hosts, onDone }: { hosts: HostRecord[]; onDone: () => void })
   function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    // Projects are always local (stored/managed on the controller). Remote
+    // hosts come in at instance-spawn time for extra compute.
     const body: Record<string, unknown> = {
       name,
       description: description || undefined,
       source_type: sourceType,
-      host_id: hostId === "" ? null : parseInt(hostId, 10),
+      host_id: null,
       path_on_host: pathOnHost,
     };
     if (sourceType === "git") {
@@ -124,19 +127,7 @@ function AddForm({ hosts, onDone }: { hosts: HostRecord[]; onDone: () => void })
 
   return (
     <form onSubmit={submit} className="bg-zinc-900 border border-zinc-800 rounded-md p-4 space-y-3">
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Name" value={name} onChange={setName} required />
-        <label className="block text-sm">
-          <span className="block mb-1">Host</span>
-          <select value={hostId} onChange={(e) => setHostId(e.target.value)}
-            className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1.5">
-            <option value="">Local (this machine)</option>
-            {hosts.map((h) => (
-              <option key={h.id} value={h.id}>{h.name}</option>
-            ))}
-          </select>
-        </label>
-      </div>
+      <Field label="Name" value={name} onChange={setName} required />
       <label className="block text-sm">
         <span className="block mb-1">Description (optional)</span>
         <input
@@ -159,7 +150,17 @@ function AddForm({ hosts, onDone }: { hosts: HostRecord[]; onDone: () => void })
           <Field label="Branch (optional)" value={gitBranch} onChange={setGitBranch} placeholder="main" />
         </div>
       )}
-      <Field label="Path on host" value={pathOnHost} onChange={setPathOnHost} required placeholder="/home/ubuntu/projects/my-repo" />
+      <Field
+        label={sourceType === "git" ? "Clone to (local path)" : "Local path"}
+        value={pathOnHost}
+        onChange={setPathOnHost}
+        required
+        placeholder="/Users/you/projects/my-repo"
+      />
+      <p className="text-xs text-zinc-500">
+        Projects always live on this machine (the controller). Remote hosts are
+        only used when you explicitly spawn an instance on one for extra compute.
+      </p>
       {error && <p className="text-sm text-red-400">{error}</p>}
       <button type="submit" disabled={pending}
         className="bg-zinc-100 text-zinc-900 px-3 py-1.5 rounded text-sm font-medium disabled:opacity-50">

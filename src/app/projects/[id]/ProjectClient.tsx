@@ -57,18 +57,23 @@ export default function ProjectClient({
         </div>
         <div className="grid grid-cols-2 gap-3 text-sm">
           <Stat label="Source" value={project.source_type} />
-          <Stat label="Host" value={host ? host.name : "—"} />
+          <Stat
+            label="Stored on"
+            value={project.host_id === null ? "local (controller)" : (host?.name ?? `#${project.host_id}`)}
+          />
           {project.source_type === "git" && (
             <>
               <Stat label="Git URL" value={project.git_url ?? "—"} />
               <Stat label="Branch" value={project.git_branch ?? "(default)"} />
             </>
           )}
-          <Stat label="Path on host" value={project.path_on_host} />
-          <Stat
-            label="Last cloned"
-            value={project.last_cloned_at ? new Date(project.last_cloned_at).toLocaleString() : "—"}
-          />
+          <Stat label="Local path" value={project.path_on_host} />
+          {project.source_type === "git" && (
+            <Stat
+              label="Last cloned"
+              value={project.last_cloned_at ? new Date(project.last_cloned_at).toLocaleString() : "—"}
+            />
+          )}
         </div>
         {project.clone_error && (
           <p className="mt-3 text-sm text-red-400 font-mono break-all">Error: {project.clone_error}</p>

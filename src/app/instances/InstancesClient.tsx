@@ -36,7 +36,11 @@ export default function InstancesClient({
         </p>
       )}
       {showAdd && spawnable.length > 0 && (
-        <SpawnForm projects={spawnable} onDone={() => { setShowAdd(false); router.refresh(); }} />
+        <SpawnForm
+          projects={spawnable}
+          hosts={hosts}
+          onDone={() => { setShowAdd(false); router.refresh(); }}
+        />
       )}
       {initialInstances.length === 0 ? (
         <p className="text-zinc-500 text-sm">No instances yet.</p>
@@ -93,9 +97,19 @@ function StatusPill({ status }: { status: InstanceRecord["status"] }) {
   return <span className={`px-2 py-0.5 rounded text-xs ${color}`}>{status}</span>;
 }
 
-function SpawnForm({ projects, onDone }: { projects: ProjectRecord[]; onDone: () => void }) {
+function SpawnForm({
+  projects,
+  hosts,
+  onDone,
+}: {
+  projects: ProjectRecord[];
+  hosts: HostRecord[];
+  onDone: () => void;
+}) {
   const [name, setName] = useState("");
   const [projectId, setProjectId] = useState<string>(projects[0] ? String(projects[0].id) : "");
+  // "" = local (controller). Otherwise a specific remote host id.
+  const [hostId, setHostId] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -109,6 +123,7 @@ function SpawnForm({ projects, onDone }: { projects: ProjectRecord[]; onDone: ()
         body: JSON.stringify({
           name,
           project_id: parseInt(projectId, 10),
+          host_id: hostId === "" ? null : parseInt(hostId, 10),
         }),
       });
       if (!r.ok) {
@@ -122,7 +137,7 @@ function SpawnForm({ projects, onDone }: { projects: ProjectRecord[]; onDone: ()
 
   return (
     <form onSubmit={submit} className="bg-zinc-900 border border-zinc-800 rounded-md p-4 space-y-3">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         <label className="block text-sm">
           <span className="block mb-1">Instance name</span>
           <input value={name} onChange={(e) => setName(e.target.value)} required
@@ -138,10 +153,21 @@ function SpawnForm({ projects, onDone }: { projects: ProjectRecord[]; onDone: ()
             ))}
           </select>
         </label>
+        <label className="block text-sm">
+          <span className="block mb-1">Run on</span>
+          <select value={hostId} onChange={(e) => setHostId(e.target.value)}
+            className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1.5"
+            title="Local by default. Pick a remote host only if you need its compute.">
+            <option value="">Local (controller)</option>
+            {hosts.map((h) => (
+              <option key={h.id} value={h.id}>{h.name}</option>
+            ))}
+          </select>
+        </label>
       </div>
       {error && <p className="text-sm text-red-400">{error}</p>}
       <p className="text-xs text-zinc-500">
-        Runs <code className="bg-zinc-950 px-1 rounded">claude remote-control --dangerously-skip-permissions</code> inside tmux on the project&apos;s host.
+        Runs <code className="bg-zinc-950 px-1 rounded">claude remote-control --dangerously-skip-permissions</code> inside tmux. Defaults to this machine; pick a remote host for extra compute (GPU, more cores).
       </p>
       <button type="submit" disabled={pending}
         className="bg-zinc-100 text-zinc-900 px-3 py-1.5 rounded text-sm font-medium disabled:opacity-50">
