@@ -2,7 +2,6 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { redeemTerminalTicket } from "./terminal-tickets";
 import { getInstance } from "./instances";
 import { getHost } from "./hosts";
-import { openSession, SshError } from "./ssh";
 import { shQuote } from "./projects";
 
 const PORT = (() => {
@@ -135,9 +134,10 @@ async function handleConnection(ws: WebSocket, rawUrl: string): Promise<void> {
 
   let sshConn;
   try {
+    const { openSession } = await import("./ssh-lazy").then((m) => m.getSsh());
     sshConn = await openSession(host);
   } catch (e) {
-    const msg = e instanceof SshError || e instanceof Error ? e.message : String(e);
+    const msg = e instanceof Error ? e.message : String(e);
     safeSendText(ws, `\r\n[dcm] SSH failed: ${msg}\r\n`);
     ws.close(1011, "ssh failed");
     return;

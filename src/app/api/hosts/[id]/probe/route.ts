@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/api-auth";
 import { getHost, recordProbe } from "@/lib/hosts";
-import { probeHost } from "@/lib/ssh";
+import { getSsh } from "@/lib/ssh-lazy";
 import { audit } from "@/lib/audit";
 import { getRequestIp } from "@/lib/request-ip";
 import { checkProbeCooldown } from "@/lib/probe-limit";
@@ -29,6 +29,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
       { status: 429, headers: { "Retry-After": Math.ceil(cd.retryAfterMs / 1000).toString() } }
     );
   }
+  const { probeHost } = await getSsh();
   const result = await probeHost(host);
   const status = recordProbe(hostId, result);
   audit({

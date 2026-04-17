@@ -65,7 +65,7 @@ export async function runHeartbeatOnce(): Promise<void> {
     if (active.length === 0) return;
     // Lazy-load ssh.ts so the native addon is only touched when we actually
     // have a remote host to probe.
-    const { probeHost } = await import("./ssh");
+    const { probeHost } = await import("./ssh-lazy").then((m) => m.getSsh());
     await runBatched(active, CONCURRENCY, async (h) => {
       const result = await probeHost(h);
       try {

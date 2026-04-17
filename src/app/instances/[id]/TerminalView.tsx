@@ -71,6 +71,8 @@ export default function TerminalView({ instance }: { instance: InstanceRecord })
         theme: { background: "#09090b", foreground: "#e4e4e7" },
         cursorBlink: true,
         convertEol: true,
+        scrollback: 10000,
+        altClickMovesCursor: true,
       });
       const fit = new FitAddon();
       term.loadAddon(fit);
@@ -190,7 +192,7 @@ export default function TerminalView({ instance }: { instance: InstanceRecord })
 
 function buildWsUrl(token: string): string {
   const wsPort = window.DCM_CONFIG?.wsPort ?? 3461;
-  const wsHost = window.DCM_CONFIG?.wsHost ?? window.location.hostname;
+  const wsHost = window.DCM_CONFIG?.wsHost || window.location.hostname;
   // We force the current window protocol family (ws for http, wss for https)
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
   const url = new URL(`${proto}//${wsHost}:${wsPort}`);

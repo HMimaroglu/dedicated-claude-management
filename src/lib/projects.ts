@@ -21,7 +21,6 @@ export interface ProjectRecord {
   clone_status: CloneStatus;
   clone_error: string | null;
   last_cloned_at: number | null;
-  multi_agent_enabled: boolean;
   created_at: number;
   updated_at: number;
 }
@@ -46,15 +45,10 @@ export interface ProjectUpdateInput {
   path_on_host?: string;
 }
 
-interface ProjectRow extends Omit<ProjectRecord, "multi_agent_enabled"> {
-  multi_agent_enabled: number | null;
-}
+type ProjectRow = ProjectRecord;
 
 function rowToProject(r: ProjectRow): ProjectRecord {
-  return {
-    ...r,
-    multi_agent_enabled: r.multi_agent_enabled === 1,
-  };
+  return r;
 }
 
 const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$/;
@@ -316,7 +310,7 @@ export async function cloneProject(projectId: number, d?: Db): Promise<CloneResu
   const host = getHost(p.host_id, db);
   if (!host) throw new Error("host not found");
 
-  const { openSession, execOnce, SshError } = await import("./ssh");
+  const { openSession, execOnce, SshError } = await import("./ssh-lazy").then((m) => m.getSsh());
   let conn;
   try {
     conn = await openSession(host);

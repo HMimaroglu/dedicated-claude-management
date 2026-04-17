@@ -64,10 +64,8 @@ describe("buildSpawnCommand", () => {
     expect(cmd).toContain("'/home/u/my proj'");
     expect(cmd).toContain("'dcm-1'");
     expect(cmd).toContain("--dangerously-skip-permissions");
-    expect(cmd).toContain("'agent-1'");
-    // Inner command is double-quoted (single-quoted) so the entire claude
-    // invocation is one tmux arg.
-    expect(cmd).toContain("exec claude remote-control");
+    expect(cmd).toContain("exec claude --dangerously-skip-permissions");
+    expect(cmd).toContain("tmux set-option");
   });
 
   it("escapes single quotes in path", () => {

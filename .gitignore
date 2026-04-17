@@ -61,3 +61,4 @@ coverage/
 # Typescript / vitest cache
 *.tsbuildinfo
 .vitest-cache/
+.playwright-mcp/

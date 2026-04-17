@@ -1,6 +1,6 @@
 // Next.js calls this once per server process on startup.
 // We use it to launch the background heartbeat loop, the terminal WS server,
-// the instance watcher, and the workflow watcher — and to install a clean
+// the instance watcher — and to install a clean
 // shutdown so Ctrl+C actually quits. Without the signal handlers, each
 // setInterval + the WS server hold the event loop open and ^C does nothing.
 
@@ -28,14 +28,6 @@ export async function register(): Promise<void> {
     startInstanceWatcher();
     stopFns.push(stopInstanceWatcher);
   }
-  if (process.env.DCM_DISABLE_WORKFLOW_WATCHER !== "true") {
-    const { startWorkflowWatcher, stopWorkflowWatcher } = await import(
-      "./orchestrator/workflow-watcher"
-    );
-    startWorkflowWatcher();
-    stopFns.push(stopWorkflowWatcher);
-  }
-
   let shuttingDown = false;
   const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
     if (shuttingDown) {

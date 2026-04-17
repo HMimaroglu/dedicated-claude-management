@@ -18,21 +18,6 @@ export default function InstanceClient({
   const [pending, start] = useTransition();
   const [expanded, setExpanded] = useState(true);
 
-  function call(path: string, method = "POST", body?: unknown) {
-    start(async () => {
-      const r = await fetch(path, {
-        method,
-        headers: body ? { "Content-Type": "application/json" } : undefined,
-        body: body ? JSON.stringify(body) : undefined,
-      });
-      if (!r.ok) {
-        const j = (await r.json().catch(() => ({}))) as { error?: string };
-        alert(j.error ?? "Request failed");
-      }
-      router.refresh();
-    });
-  }
-
   function remove() {
     if (!confirm(`Delete instance "${instance.name}"? (kills tmux session then removes the row)`)) return;
     start(async () => {
@@ -48,13 +33,6 @@ export default function InstanceClient({
       }
     });
   }
-
-  const canPause = instance.status === "running";
-  const canResume = instance.status === "paused";
-  const canKill =
-    instance.status === "running" ||
-    instance.status === "starting" ||
-    instance.status === "paused";
 
   return (
     <div className="space-y-6">
@@ -90,44 +68,15 @@ export default function InstanceClient({
           />
           <Stat label="Working dir" value={project?.path_on_host ?? "—"} />
           <Stat label="PID" value={instance.pid !== null ? String(instance.pid) : "—"} />
-          <Stat label="Restart count" value={String(instance.restart_count)} />
-          <Stat label="Auto-restart" value={instance.auto_restart ? "enabled" : "disabled"} />
           <Stat
             label="Spawned at"
             value={instance.spawned_at ? new Date(instance.spawned_at).toLocaleString() : "—"}
-          />
-          <Stat
-            label="Last restart"
-            value={instance.last_restart_at ? new Date(instance.last_restart_at).toLocaleString() : "—"}
           />
         </div>
         {instance.spawn_error && (
           <p className="mt-3 text-sm text-red-400 font-mono break-all">Error: {instance.spawn_error}</p>
         )}
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button disabled={pending} onClick={() => call(`/api/instances/${instance.id}`)}
-            className="bg-zinc-100 text-zinc-900 px-3 py-1.5 rounded text-sm font-medium disabled:opacity-50">
-            {pending ? "…" : "Refresh status"}
-          </button>
-          <button disabled={pending || !canPause} onClick={() => call(`/api/instances/${instance.id}/pause`)}
-            className="bg-yellow-900 text-yellow-100 px-3 py-1.5 rounded text-sm font-medium disabled:opacity-50">
-            Pause
-          </button>
-          <button disabled={pending || !canResume} onClick={() => call(`/api/instances/${instance.id}/resume`)}
-            className="bg-emerald-900 text-emerald-100 px-3 py-1.5 rounded text-sm font-medium disabled:opacity-50">
-            Resume
-          </button>
-          <button disabled={pending || !canKill} onClick={() => call(`/api/instances/${instance.id}/kill`)}
-            className="bg-yellow-900 text-yellow-100 px-3 py-1.5 rounded text-sm font-medium disabled:opacity-50">
-            Kill
-          </button>
-          <button disabled={pending}
-            onClick={() =>
-              call(`/api/instances/${instance.id}/auto-restart`, "POST", { enabled: !instance.auto_restart })
-            }
-            className="bg-zinc-800 text-zinc-100 px-3 py-1.5 rounded text-sm font-medium disabled:opacity-50">
-            {instance.auto_restart ? "Disable auto-restart" : "Enable auto-restart"}
-          </button>
+        <div className="mt-4">
           <button disabled={pending} onClick={remove}
             className="bg-red-900 text-red-100 px-3 py-1.5 rounded text-sm font-medium disabled:opacity-50">
             Delete

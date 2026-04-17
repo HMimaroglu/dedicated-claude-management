@@ -1,13 +1,12 @@
 import Link from "next/link";
 
-export type NavTab = "dashboard" | "hosts" | "projects" | "instances" | "workflows";
+export type NavTab = "dashboard" | "hosts" | "projects" | "instances";
 
 const ITEMS: Array<{ tab: NavTab; href: string; label: string }> = [
   { tab: "dashboard", href: "/dashboard", label: "Dashboard" },
   { tab: "hosts", href: "/hosts", label: "Hosts" },
   { tab: "projects", href: "/projects", label: "Projects" },
   { tab: "instances", href: "/instances", label: "Instances" },
-  { tab: "workflows", href: "/workflows", label: "Workflows" },
 ];
 
 export function Nav({ current }: { current: NavTab }) {

@@ -52,10 +52,19 @@ async function sampleCpuPct(ms = 200): Promise<number> {
 // Used" is wired + active + compressed (cached pages aren't counted). We
 // exec `vm_stat` to get those counters and compute the same number.
 async function resolveMemUsedMb(totalMb: number): Promise<number> {
-  if (os.platform() !== "darwin") {
-    const freeMb = Math.round(os.freemem() / (1024 * 1024));
-    return Math.max(0, totalMb - freeMb);
+  if (os.platform() === "darwin") {
+    return resolveMemUsedDarwin(totalMb);
   }
+  if (os.platform() === "linux") {
+    return resolveMemUsedLinux(totalMb);
+  }
+  // Fallback for other platforms.
+  const freeMb = Math.round(os.freemem() / (1024 * 1024));
+  return Math.max(0, totalMb - freeMb);
+}
+
+// macOS: vm_stat reports wired+active+compressed (matches Activity Monitor).
+async function resolveMemUsedDarwin(totalMb: number): Promise<number> {
   try {
     const r = await execLocal("vm_stat", { timeoutMs: 2_000 });
     if (r.code !== 0) throw new Error(`vm_stat exited ${r.code}`);
@@ -71,10 +80,30 @@ async function resolveMemUsedMb(totalMb: number): Promise<number> {
     const usedPages = wired + active + compressed;
     return Math.round((usedPages * pageSize) / (1024 * 1024));
   } catch {
-    // Fall back to os.freemem accounting if vm_stat fails.
     const freeMb = Math.round(os.freemem() / (1024 * 1024));
     return Math.max(0, totalMb - freeMb);
   }
+}
+
+// Linux: read /proc/meminfo. MemTotal - MemAvailable matches htop/free.
+async function resolveMemUsedLinux(totalMb: number): Promise<number> {
+  try {
+    const r = await execLocal("cat /proc/meminfo", { timeoutMs: 2_000 });
+    if (r.code !== 0) throw new Error(`/proc/meminfo exited ${r.code}`);
+    const get = (key: string): number | null => {
+      const m = r.stdout.match(new RegExp(`${key}:\\s+(\\d+)\\s+kB`));
+      return m && m[1] ? parseInt(m[1], 10) : null;
+    };
+    const availKb = get("MemAvailable");
+    const totalKb = get("MemTotal");
+    if (availKb !== null && totalKb !== null) {
+      return Math.max(0, Math.round((totalKb - availKb) / 1024));
+    }
+  } catch {
+    // ignore
+  }
+  const freeMb = Math.round(os.freemem() / (1024 * 1024));
+  return Math.max(0, totalMb - freeMb);
 }
 
 export async function computeLocalMetric(): Promise<LocalMetric> {

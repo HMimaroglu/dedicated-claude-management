@@ -24,18 +24,6 @@ export default function ProjectClient({
     });
   }
 
-  function toggleMultiAgent() {
-    start(async () => {
-      const r = await fetch(`/api/projects/${project.id}/multi-agent`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled: !project.multi_agent_enabled }),
-      });
-      if (!r.ok) alert((await r.json().catch(() => ({}))).error ?? "Toggle failed");
-      router.refresh();
-    });
-  }
-
   function remove() {
     if (!confirm(`Delete project "${project.name}"? (This does NOT delete files on the host.)`)) return;
     start(async () => {
@@ -100,29 +88,6 @@ export default function ProjectClient({
         </section>
       )}
 
-      <section className="bg-zinc-900 border border-zinc-800 rounded-md p-4">
-        <div className="flex justify-between items-start">
-          <div>
-            <h3 className="text-sm font-semibold">Multi-agent workflow</h3>
-            <p className="text-xs text-zinc-400 mt-1 max-w-xl">
-              Opt-in. When enabled, a 9-agent team (2 sys-design, 2 research, 2 dev, 3 auditors) can
-              be launched against this project via the Workflows tab. Off by default — 9-agent runs
-              incur real Anthropic API cost.
-            </p>
-          </div>
-          <button
-            disabled={pending}
-            onClick={toggleMultiAgent}
-            className={`${
-              project.multi_agent_enabled
-                ? "bg-emerald-900 text-emerald-100"
-                : "bg-zinc-800 text-zinc-100"
-            } px-3 py-1.5 rounded text-sm font-medium disabled:opacity-50`}
-          >
-            {project.multi_agent_enabled ? "Enabled — click to disable" : "Enable"}
-          </button>
-        </div>
-      </section>
     </div>
   );
 }
