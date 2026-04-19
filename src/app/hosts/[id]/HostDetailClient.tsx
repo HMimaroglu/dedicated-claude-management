@@ -206,7 +206,10 @@ function SshKeySetup({ host, onDone }: { host: HostRecord; onDone: () => void })
   const [show, setShow] = useState(false);
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
   const [pending, start] = useTransition();
+
+  if (done) return null;
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -224,6 +227,7 @@ function SshKeySetup({ host, onDone }: { host: HostRecord; onDone: () => void })
       }
       setPassword("");
       setShow(false);
+      setDone(true);
       onDone();
     });
   }
@@ -234,7 +238,7 @@ function SshKeySetup({ host, onDone }: { host: HostRecord; onDone: () => void })
         <div>
           <h3 className="text-sm font-semibold">Push SSH key</h3>
           <p className="text-xs text-zinc-400 mt-1">
-            One-time password to run ssh-copy-id. Password is never stored.
+            One-time password to push your key. Password is never stored.
           </p>
         </div>
         <button onClick={() => setShow((v) => !v)}

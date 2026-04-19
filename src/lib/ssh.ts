@@ -1,4 +1,7 @@
 import crypto from "node:crypto";
+import { promises as fs } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { Client, type ConnectConfig } from "ssh2";
 import type { Db } from "./db";
 import { getDb } from "./db";
@@ -7,6 +10,20 @@ import { getHostSecrets, type ProbeResult } from "./hosts";
 
 const DEFAULT_CONNECT_TIMEOUT_MS = 10_000;
 const DEFAULT_EXEC_TIMEOUT_MS = 10_000;
+
+// Finds the first default private key on the controller (~/.ssh/id_*).
+async function findDefaultPrivateKey(): Promise<string | null> {
+  const sshDir = path.join(os.homedir(), ".ssh");
+  for (const name of ["id_ed25519", "id_rsa", "id_ecdsa"]) {
+    try {
+      const content = await fs.readFile(path.join(sshDir, name), "utf8");
+      return content;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
 
 export interface ExecResult {
   stdout: string;
@@ -119,8 +136,14 @@ export async function openSession(
     if (secrets.passphrase) cfg.passphrase = secrets.passphrase;
   } else if (host.auth_method === "agent") {
     const sock = process.env.SSH_AUTH_SOCK;
-    if (!sock) throw new SshError("SSH_AUTH_SOCK not set on controller", "no_creds");
-    cfg.agent = sock;
+    if (sock) {
+      cfg.agent = sock;
+    } else {
+      // No SSH agent — fall back to default key files on the controller.
+      const keyFile = await findDefaultPrivateKey();
+      if (!keyFile) throw new SshError("SSH_AUTH_SOCK not set and no default key found (~/.ssh/id_*)", "no_creds");
+      cfg.privateKey = keyFile;
+    }
   }
 
   return new Promise<Client>((resolve, reject) => {
