@@ -30,6 +30,7 @@ export default function HostsClient({ initialHosts }: { initialHosts: HostRecord
               <th className="py-2 px-2">Status</th>
               <th className="py-2 px-2">Cores</th>
               <th className="py-2 px-2">RAM</th>
+              <th className="py-2 px-2">Storage</th>
               <th className="py-2 px-2">GPU</th>
               <th className="py-2 px-2">Latency</th>
               <th className="py-2 px-2"></th>
@@ -44,6 +45,9 @@ export default function HostsClient({ initialHosts }: { initialHosts: HostRecord
                 <td className="py-2 px-2 text-zinc-400">{h.capabilities.cores ?? "—"}</td>
                 <td className="py-2 px-2 text-zinc-400">
                   {h.capabilities.ram_mb ? `${Math.round(h.capabilities.ram_mb / 1024)} GB` : "—"}
+                </td>
+                <td className="py-2 px-2 text-zinc-400">
+                  {h.capabilities.storage_gb ? `${h.capabilities.storage_gb} GB` : "—"}
                 </td>
                 <td className="py-2 px-2 text-zinc-400">{h.capabilities.gpu ?? "—"}</td>
                 <td className="py-2 px-2 text-zinc-400">{h.last_latency_ms != null ? `${h.last_latency_ms}ms` : "—"}</td>

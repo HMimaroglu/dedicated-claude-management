@@ -1,11 +1,10 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { hasAnyUser } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
 import { computeDashboard } from "@/lib/dashboard-metrics";
 import LogoutButton from "./LogoutButton";
-import Sparkline from "./Sparkline";
 import LiveLocalMetrics from "./LiveLocalMetrics";
+import LiveRemoteHosts from "./LiveRemoteHosts";
 import { Nav } from "../Nav";
 
 export const dynamic = "force-dynamic";
@@ -64,52 +63,17 @@ export default async function DashboardPage() {
 
       <section>
         <h2 className="text-sm font-semibold text-zinc-400 mb-3">Remote hosts — CPU load (last 30 probes)</h2>
-        {hosts.length === 0 ? (
-          <p className="text-sm text-zinc-500">
-            No remote hosts registered.{" "}
-            <Link href="/hosts" className="underline">Add one →</Link>{" "}
-            when you want more compute.
-          </p>
-        ) : (
-          <div className="space-y-2">
-            {hosts.map((m) => {
-              const points = m.series
-                .filter((p) => p.success && p.cpu_load_1m !== null)
-                .map((p) => p.cpu_load_1m as number)
-                .reverse();
-              const cores = m.host.capabilities.cores ?? 1;
-              const maxY = Math.max(cores, ...points, 1);
-              const latest = m.latest && m.latest.success ? m.latest : null;
-              return (
-                <div key={m.host.id} className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 rounded-md p-3">
-                  <div className="w-40 text-sm min-w-0">
-                    <Link href={`/hosts/${m.host.id}`} className="font-mono truncate block hover:text-zinc-100">
-                      {m.host.name}
-                    </Link>
-                    <span className={`text-xs ${m.host.status === "online" ? "text-emerald-400" : "text-zinc-500"}`}>
-                      {m.host.status}
-                    </span>
-                  </div>
-                  <div className="flex-1">
-                    <Sparkline values={points} maxY={maxY} />
-                  </div>
-                  <div className="w-32 text-right text-xs font-mono text-zinc-400">
-                    {latest ? (
-                      <>
-                        <div>load {latest.cpu_load_1m?.toFixed(2) ?? "—"}</div>
-                        <div>
-                          mem {latest.mem_used_mb ?? "?"}/{latest.mem_total_mb ?? "?"} MB
-                        </div>
-                      </>
-                    ) : (
-                      <span className="text-zinc-600">no data</span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        <LiveRemoteHosts initial={hosts.map((m) => ({
+          id: m.host.id,
+          name: m.host.name,
+          status: m.host.status,
+          capabilities: m.host.capabilities,
+          latest: m.latest && m.latest.success ? m.latest : null,
+          series: m.series
+            .filter((p) => p.success && p.cpu_load_1m !== null)
+            .map((p) => p.cpu_load_1m as number)
+            .reverse(),
+        }))} />
       </section>
 
     </main>

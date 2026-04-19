@@ -11,6 +11,7 @@ export interface HostCapabilities {
   gpu_count?: number;
   cores?: number;
   ram_mb?: number;
+  storage_gb?: number;
   tags?: string[];
 }
 

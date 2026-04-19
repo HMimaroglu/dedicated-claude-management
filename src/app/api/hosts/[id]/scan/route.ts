@@ -34,13 +34,20 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
   // Extract capabilities from probe and update host.
   const caps = { ...host.capabilities };
 
-  // Detect cores via SSH.
+  // Detect cores + storage via SSH.
   try {
     const conn = await openSession(host);
     try {
       const nproc = await execOnce(conn, "nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 0");
       const cores = parseInt(nproc.stdout.trim(), 10);
       if (Number.isFinite(cores) && cores > 0) caps.cores = cores;
+
+      // Total disk on root filesystem in GB
+      const dfRes = await execOnce(conn, "df -P / | tail -1 | awk '{print $2}'");
+      const totalKb = parseInt(dfRes.stdout.trim(), 10);
+      if (Number.isFinite(totalKb) && totalKb > 0) {
+        caps.storage_gb = Math.round(totalKb / (1024 * 1024));
+      }
     } finally {
       conn.end();
     }

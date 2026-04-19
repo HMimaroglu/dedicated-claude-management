@@ -32,6 +32,7 @@ const CreateSchema = z.object({
       gpu_count: z.number().int().optional(),
       cores: z.number().int().optional(),
       ram_mb: z.number().int().optional(),
+      storage_gb: z.number().int().optional(),
       tags: z.array(z.string()).optional(),
     })
     .optional(),
