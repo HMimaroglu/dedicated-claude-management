@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import os from "node:os";
+import path from "node:path";
 import { promises as fs } from "node:fs";
 import type { ProbeResult } from "./hosts";
 import { shQuote } from "./projects";
@@ -137,10 +138,17 @@ export interface LocalSpawnResult {
   pid: number | null;
 }
 
+// Expand ~/… to the actual home directory so Node fs calls work.
+function expandHome(p: string): string {
+  if (p.startsWith("~/")) return path.join(os.homedir(), p.slice(2));
+  return p;
+}
+
 export async function spawnLocalTmux(opts: LocalSpawnOpts): Promise<LocalSpawnResult> {
+  const projectPath = expandHome(opts.projectPath);
   // Ensure the project path exists; else tmux will error with a useless msg.
   try {
-    await fs.stat(opts.projectPath);
+    await fs.stat(projectPath);
   } catch {
     return {
       success: false,
@@ -156,7 +164,7 @@ export async function spawnLocalTmux(opts: LocalSpawnOpts): Promise<LocalSpawnRe
   // Enable tmux mouse mode so scroll wheel works in the web terminal.
   const cmd =
     `tmux kill-session -t ${shQuote(opts.session)} 2>/dev/null; ` +
-    `cd ${shQuote(opts.projectPath)} && tmux new-session -d -s ${shQuote(opts.session)} ${shQuote(inner)} && ` +
+    `cd ${shQuote(projectPath)} && tmux new-session -d -s ${shQuote(opts.session)} ${shQuote(inner)} && ` +
     `tmux set-option -t ${shQuote(opts.session)} mouse on`;
   const r = await execLocal(cmd, { timeoutMs: 15_000 });
   if (r.code !== 0) {
