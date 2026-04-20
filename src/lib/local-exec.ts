@@ -158,12 +158,22 @@ export async function spawnLocalTmux(opts: LocalSpawnOpts): Promise<LocalSpawnRe
     };
   }
 
-  // Resolve the full path to `claude` so tmux sessions (which use non-login
-  // shells without ~/.profile) can find it even if it's in ~/.local/bin.
-  const whichClaude = await execLocal("command -v claude", { timeoutMs: 5_000 });
-  const claudeBin = whichClaude.code === 0 && whichClaude.stdout.trim()
-    ? whichClaude.stdout.trim()
-    : "claude"; // fallback to bare name
+  // Resolve the full path to `claude`. The server process often runs without
+  // ~/.local/bin in PATH, so we search common install locations explicitly.
+  const searchCmd =
+    `command -v claude 2>/dev/null || ` +
+    `for p in "$HOME/.local/bin/claude" "$HOME/.claude/bin/claude" /usr/local/bin/claude /usr/bin/claude; do ` +
+    `[ -x "$p" ] && echo "$p" && break; done`;
+  const whichClaude = await execLocal(searchCmd, { timeoutMs: 5_000 });
+  const claudeBin = whichClaude.stdout.trim() || null;
+  if (!claudeBin) {
+    return {
+      success: false,
+      stderr: "",
+      error: "claude CLI not found on controller (checked PATH, ~/.local/bin, /usr/local/bin)",
+      pid: null,
+    };
+  }
   const extra = (opts.extraClaudeArgs ?? []).map(shQuote).join(" ");
   const inner = `exec ${shQuote(claudeBin)} --dangerously-skip-permissions ${extra}`.trim();
   // Kill any pre-existing session with the same name (belt-and-braces).
