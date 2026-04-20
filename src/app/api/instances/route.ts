@@ -25,6 +25,7 @@ const CreateSchema = z.object({
   // null = local/controller (inherits from project). optional = inherit from
   // project.host_id. Both are accepted over the wire.
   host_id: z.number().int().positive().nullable().optional(),
+  use_workflow: z.boolean().optional(),
   requirements: z
     .object({
       gpu: z.boolean().optional(),
@@ -65,7 +66,9 @@ export async function POST(req: Request) {
 
   // Spawn synchronously so the client sees the result. Clean up the row on
   // failure so the user can retry with the same name.
-  const spawn = await spawnInstance(inst.id);
+  const spawn = await spawnInstance(inst.id, undefined, {
+    useWorkflow: parsed.data.use_workflow ?? false,
+  });
   if (!spawn.success) {
     try {
       deleteInstanceRow(inst.id);

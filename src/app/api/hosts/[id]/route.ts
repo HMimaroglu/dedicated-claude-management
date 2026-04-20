@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuth } from "@/lib/api-auth";
 import { deleteHost, getHost, recentProbes, updateHost } from "@/lib/hosts";
+import { updateHostFiles } from "@/lib/host-context";
 import { audit } from "@/lib/audit";
 import { getRequestIp } from "@/lib/request-ip";
 
@@ -72,6 +73,7 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
       ip: getRequestIp(req),
       details: { host_id: hostId, fields: Object.keys(parsed.data) },
     });
+    void updateHostFiles();
     return NextResponse.json({ host });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "update failed";
@@ -93,5 +95,6 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
     ip: getRequestIp(req),
     details: { host_id: hostId },
   });
+  void updateHostFiles();
   return NextResponse.json({ ok: true });
 }

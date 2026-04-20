@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuth } from "@/lib/api-auth";
 import { createHost, listHosts } from "@/lib/hosts";
+import { updateHostFiles } from "@/lib/host-context";
 import { audit } from "@/lib/audit";
 import { getRequestIp } from "@/lib/request-ip";
 
@@ -62,6 +63,7 @@ export async function POST(req: Request) {
       ip: getRequestIp(req),
       details: { host_id: host.id, name: host.name, address: host.address },
     });
+    void updateHostFiles(); // update .dcm/hosts.md in active instances
     return NextResponse.json({ host }, { status: 201 });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "create failed";

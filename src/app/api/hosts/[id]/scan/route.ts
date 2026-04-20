@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/api-auth";
 import { getHost, updateHost, recordProbe } from "@/lib/hosts";
+import { updateHostFiles } from "@/lib/host-context";
 import { getSsh } from "@/lib/ssh-lazy";
 import { audit } from "@/lib/audit";
 import { getRequestIp } from "@/lib/request-ip";
@@ -62,6 +63,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
   }
 
   updateHost(hostId, { capabilities: caps });
+  void updateHostFiles();
 
   audit({
     event: "host.updated",

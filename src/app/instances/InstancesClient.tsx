@@ -110,6 +110,7 @@ function SpawnForm({
   const [projectId, setProjectId] = useState<string>(projects[0] ? String(projects[0].id) : "");
   // "" = local (controller). Otherwise a specific remote host id.
   const [hostId, setHostId] = useState<string>("");
+  const [useWorkflow, setUseWorkflow] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -124,6 +125,7 @@ function SpawnForm({
           name,
           project_id: parseInt(projectId, 10),
           host_id: hostId === "" ? null : parseInt(hostId, 10),
+          use_workflow: useWorkflow,
         }),
       });
       if (!r.ok) {
@@ -165,10 +167,13 @@ function SpawnForm({
           </select>
         </label>
       </div>
+      <label className="flex items-center gap-2 text-sm cursor-pointer">
+        <input type="checkbox" checked={useWorkflow} onChange={(e) => setUseWorkflow(e.target.checked)}
+          className="rounded border-zinc-700 bg-zinc-950" />
+        <span>Use development workflow</span>
+        <span className="text-zinc-500 text-xs">(structured: design → research → implement → audit)</span>
+      </label>
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <p className="text-xs text-zinc-500">
-        Runs <code className="bg-zinc-950 px-1 rounded">claude --dangerously-skip-permissions</code> inside tmux. Defaults to this machine; pick a remote host for extra compute (GPU, more cores).
-      </p>
       <button type="submit" disabled={pending}
         className="bg-zinc-100 text-zinc-900 px-3 py-1.5 rounded text-sm font-medium disabled:opacity-50">
         {pending ? "Spawning…" : "Spawn"}
