@@ -195,10 +195,12 @@ export function buildSpawnCommand(opts: {
   const sess = opts.sessionName;
   const path = shQuote(opts.projectPath);
   const extra = (opts.extraClaudeArgs ?? []).map(shQuote).join(" ");
+  // Prepend common locations to PATH so non-login tmux shells can find claude.
+  // The inner command is shQuoted for tmux, so we can't use $() inside it.
   const inner = `exec claude --dangerously-skip-permissions ${extra}`.trim();
   return (
     `tmux kill-session -t ${shQuote(sess)} 2>/dev/null; ` +
-    `cd ${path} && tmux new-session -d -s ${shQuote(sess)} ${shQuote(inner)} && ` +
+    `cd ${path} && PATH="$HOME/.local/bin:$PATH" tmux new-session -d -s ${shQuote(sess)} -e PATH="$HOME/.local/bin:$PATH" ${shQuote(inner)} && ` +
     `tmux set-option -t ${shQuote(sess)} mouse on`
   );
 }

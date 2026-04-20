@@ -158,8 +158,14 @@ export async function spawnLocalTmux(opts: LocalSpawnOpts): Promise<LocalSpawnRe
     };
   }
 
+  // Resolve the full path to `claude` so tmux sessions (which use non-login
+  // shells without ~/.profile) can find it even if it's in ~/.local/bin.
+  const whichClaude = await execLocal("command -v claude", { timeoutMs: 5_000 });
+  const claudeBin = whichClaude.code === 0 && whichClaude.stdout.trim()
+    ? whichClaude.stdout.trim()
+    : "claude"; // fallback to bare name
   const extra = (opts.extraClaudeArgs ?? []).map(shQuote).join(" ");
-  const inner = `exec claude --dangerously-skip-permissions ${extra}`.trim();
+  const inner = `exec ${shQuote(claudeBin)} --dangerously-skip-permissions ${extra}`.trim();
   // Kill any pre-existing session with the same name (belt-and-braces).
   // Enable tmux mouse mode so scroll wheel works in the web terminal.
   const cmd =
