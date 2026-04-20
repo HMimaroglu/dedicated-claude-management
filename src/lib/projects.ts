@@ -5,6 +5,9 @@ import { getDb } from "./db";
 // so Next.js dev doesn't try to bundle the .node binary into client-visible
 // chunks when a page server-component just reads projects from the DB.
 import { getHost } from "./hosts";
+import { stat } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 export type SourceType = "git" | "local";
 export type CloneStatus = "pending" | "cloning" | "ready" | "error" | "skipped";
@@ -346,4 +349,33 @@ export function dirname(p: string): string {
   const i = p.lastIndexOf("/");
   if (i <= 0) return p.startsWith("~/") ? "~" : "/";
   return p.slice(0, i);
+}
+
+// Expand a controller-side path. Only a leading `~/` is rewritten to the
+// process owner's home — `~user/` is intentionally not supported (validatePath
+// would have rejected anything starting with another character anyway).
+export function expandControllerPath(p: string): string {
+  if (p.startsWith("~/")) return join(homedir(), p.slice(2));
+  return p;
+}
+
+export interface PathExistsResult {
+  exists: boolean;
+  isDirectory: boolean;
+}
+
+// Stat the controller-local resolution of `p`. Symlinks are followed (matches
+// how git/clone would treat the path). Any errno (ENOENT, EACCES, ELOOP, ...)
+// is collapsed to {exists:false, isDirectory:false} — callers only need a
+// yes/no for display, and we never want to leak fs error strings to the UI.
+export async function pathExistsOnController(p: string): Promise<PathExistsResult> {
+  // Re-validate defensively. Anything that already lives in the DB has been
+  // through validatePath, but a future caller could pass an unvalidated string.
+  if (validatePath(p) !== null) return { exists: false, isDirectory: false };
+  try {
+    const s = await stat(expandControllerPath(p));
+    return { exists: true, isDirectory: s.isDirectory() };
+  } catch {
+    return { exists: false, isDirectory: false };
+  }
 }

@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import crypto from "node:crypto";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { createDb, type Db } from "../src/lib/db";
 import { _setKeyForTests } from "../src/lib/crypto";
 import { createHost } from "../src/lib/hosts";
@@ -7,8 +10,10 @@ import {
   createProject,
   deleteProject,
   dirname,
+  expandControllerPath,
   getProject,
   listProjects,
+  pathExistsOnController,
   redactGitCredentials,
   shQuote,
   tryClaimCloning,
@@ -210,6 +215,55 @@ describe("project CRUD", () => {
       db
     );
     expect(() => updateProject(p.id, { git_url: "https://example.com/x.git" }, db)).toThrow();
+  });
+});
+
+describe("expandControllerPath", () => {
+  it("rewrites a leading ~/ to homedir", () => {
+    expect(expandControllerPath("~/foo/bar")).toBe(path.join(os.homedir(), "foo/bar"));
+  });
+  it("leaves absolute paths untouched", () => {
+    expect(expandControllerPath("/etc/hosts")).toBe("/etc/hosts");
+  });
+  it("does not expand a tilde mid-path", () => {
+    expect(expandControllerPath("/var/~/x")).toBe("/var/~/x");
+  });
+});
+
+describe("pathExistsOnController", () => {
+  let root: string;
+  beforeEach(() => {
+    root = mkdtempSync(path.join(os.tmpdir(), "dcm-pathcheck-"));
+  });
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("returns exists+isDirectory for a real directory", async () => {
+    const r = await pathExistsOnController(root);
+    expect(r).toEqual({ exists: true, isDirectory: true });
+  });
+
+  it("returns exists but not isDirectory for a file", async () => {
+    const f = path.join(root, "file.txt");
+    writeFileSync(f, "hi");
+    const r = await pathExistsOnController(f);
+    expect(r).toEqual({ exists: true, isDirectory: false });
+  });
+
+  it("returns not exists for a missing path", async () => {
+    const r = await pathExistsOnController(path.join(root, "nope"));
+    expect(r).toEqual({ exists: false, isDirectory: false });
+  });
+
+  it("rejects unvalidated input (shell metachars) without statting", async () => {
+    const r = await pathExistsOnController("/tmp/;rm -rf /");
+    expect(r).toEqual({ exists: false, isDirectory: false });
+  });
+
+  it("rejects relative input", async () => {
+    const r = await pathExistsOnController("relative/path");
+    expect(r).toEqual({ exists: false, isDirectory: false });
   });
 });
 

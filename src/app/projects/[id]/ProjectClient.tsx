@@ -1,15 +1,17 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import type { ProjectRecord } from "@/lib/projects";
+import type { ProjectRecord, PathExistsResult } from "@/lib/projects";
 import type { HostRecord } from "@/lib/hosts";
 
 export default function ProjectClient({
   project,
   host,
+  controllerPath,
 }: {
   project: ProjectRecord;
   host: HostRecord | null;
+  controllerPath: PathExistsResult | null;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -55,7 +57,11 @@ export default function ProjectClient({
               <Stat label="Branch" value={project.git_branch ?? "(default)"} />
             </>
           )}
-          <Stat label="Local path" value={project.path_on_host} />
+          <Stat
+            label="Local path"
+            value={project.path_on_host}
+            badge={controllerPath ? <PathBadge result={controllerPath} /> : null}
+          />
           {project.source_type === "git" && (
             <Stat
               label="Last cloned"
@@ -92,13 +98,26 @@ export default function ProjectClient({
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, badge }: { label: string; value: string; badge?: React.ReactNode }) {
   return (
     <div>
-      <div className="text-zinc-500 text-xs mb-0.5">{label}</div>
+      <div className="text-zinc-500 text-xs mb-0.5 flex items-center gap-2">
+        <span>{label}</span>
+        {badge}
+      </div>
       <div className="font-mono break-all">{value}</div>
     </div>
   );
+}
+
+function PathBadge({ result }: { result: PathExistsResult }) {
+  if (result.exists && result.isDirectory) {
+    return <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-900 text-emerald-300">exists on controller</span>;
+  }
+  if (result.exists) {
+    return <span className="px-1.5 py-0.5 rounded text-[10px] bg-yellow-900 text-yellow-300">not a directory</span>;
+  }
+  return <span className="px-1.5 py-0.5 rounded text-[10px] bg-red-900 text-red-300">does not exist on controller</span>;
 }
 
 function StatusPill({ status }: { status: ProjectRecord["clone_status"] }) {

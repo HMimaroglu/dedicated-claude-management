@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { hasAnyUser } from "@/lib/db";
 import { getSessionUser } from "@/lib/session";
-import { getProject } from "@/lib/projects";
+import { getProject, pathExistsOnController, type PathExistsResult } from "@/lib/projects";
 import { getHost } from "@/lib/hosts";
 import ProjectClient from "./ProjectClient";
 import { Nav } from "../../Nav";
@@ -21,6 +21,11 @@ export default async function ProjectDetail(
   const project = getProject(projectId);
   if (!project) notFound();
   const host = project.host_id ? getHost(project.host_id) : null;
+  // Controller-local path existence is only meaningful for projects stored on
+  // the controller itself (host_id === null). Remote-host paths would require
+  // an SSH probe, which is out of scope for this view.
+  const controllerPath: PathExistsResult | null =
+    project.host_id === null ? await pathExistsOnController(project.path_on_host) : null;
 
   return (
     <main className="max-w-5xl mx-auto pt-12 px-4">
@@ -34,7 +39,7 @@ export default async function ProjectDetail(
         </div>
         <span className="text-sm text-zinc-400">{user.username}</span>
       </header>
-      <ProjectClient project={project} host={host} />
+      <ProjectClient project={project} host={host} controllerPath={controllerPath} />
     </main>
   );
 }
