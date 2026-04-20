@@ -75,8 +75,8 @@ export function tmuxSessionName(instanceId: number): string {
 }
 
 export function validateInstanceName(n: unknown): string | null {
-  if (typeof n !== "string" || !INSTANCE_NAME_RE.test(n)) {
-    return "Name must be 1-64 chars, alphanumeric first, then [a-z0-9_.-]";
+  if (typeof n !== "string" || !INSTANCE_NAME_RE.test(n.trim())) {
+    return "Name must be 1-64 chars, alphanumeric/underscore/dash/dot only, no spaces";
   }
   return null;
 }
@@ -84,7 +84,8 @@ export function validateInstanceName(n: unknown): string | null {
 export function createInstanceRow(input: InstanceCreateInput, d?: Db): InstanceRecord {
   const db = d ?? getDb();
 
-  const err = validateInstanceName(input.name);
+  const trimmedName = typeof input.name === "string" ? input.name.trim() : input.name;
+  const err = validateInstanceName(trimmedName);
   if (err) throw new Error(err);
   if (!Number.isInteger(input.project_id) || input.project_id <= 0) throw new Error("project_id required");
 
@@ -113,7 +114,7 @@ export function createInstanceRow(input: InstanceCreateInput, d?: Db): InstanceR
       ) VALUES (?, ?, ?, ?, 'starting', ?, ?, ?)`
     )
     .run(
-      input.name,
+      trimmedName,
       input.project_id,
       host_id ?? null,
       placeholder,
