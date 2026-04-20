@@ -1,6 +1,6 @@
 import type { Db } from "./db";
 import { getDb } from "./db";
-import { getHost } from "./hosts";
+import { getHost, listHosts } from "./hosts";
 import { getProject, shQuote } from "./projects";
 // ssh.ts is imported dynamically below (inside functions that actually need
 // SSH) so pulling `ssh2` / its native `cpu-features` addon into the module
@@ -66,6 +66,29 @@ function rowToInstance(r: InstanceRow): InstanceRecord {
     auto_restart: r.auto_restart === 1,
     requirements: JSON.parse(r.requirements || "{}") as InstanceRequirements,
   };
+}
+
+// Builds a system prompt snippet listing all registered hosts so Claude
+// instances know what compute is available to them.
+function buildHostContext(db: Db): string {
+  const hosts = listHosts(db);
+  if (hosts.length === 0) return "";
+  const lines = hosts.map((h) => {
+    const parts = [`  - ${h.name}: ${h.ssh_user}@${h.address}:${h.port}`];
+    const caps: string[] = [];
+    if (h.capabilities.cores) caps.push(`${h.capabilities.cores} cores`);
+    if (h.capabilities.ram_mb) caps.push(`${Math.round(h.capabilities.ram_mb / 1024)} GB RAM`);
+    if (h.capabilities.storage_gb) caps.push(`${h.capabilities.storage_gb} GB storage`);
+    if (h.capabilities.gpu) caps.push(`GPU: ${h.capabilities.gpu}`);
+    if (caps.length) parts.push(`    (${caps.join(", ")})`);
+    parts.push(`    Status: ${h.status}`);
+    return parts.join("\n");
+  });
+  return [
+    "## Available compute hosts",
+    "You have SSH access to the following machines. Use them freely for builds, tests, or any compute-intensive work.",
+    ...lines,
+  ].join("\n");
 }
 
 const INSTANCE_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$/;
@@ -219,6 +242,13 @@ export async function spawnInstance(instanceId: number, d?: Db): Promise<SpawnRe
   const project = getProject(inst.project_id, db);
   if (!project) throw new Error("project not found");
 
+  // Build extra args: inject host context so Claude knows available compute.
+  const extraClaudeArgs: string[] = [];
+  const hostCtx = buildHostContext(db);
+  if (hostCtx) {
+    extraClaudeArgs.push("--append-system-prompt", hostCtx);
+  }
+
   // Local (controller) spawn path — no SSH, just tmux on the local box.
   if (inst.host_id === null) {
     const { spawnLocalTmux } = await import("./local-exec");
@@ -226,6 +256,7 @@ export async function spawnInstance(instanceId: number, d?: Db): Promise<SpawnRe
       session: inst.tmux_session,
       projectPath: project.path_on_host,
       instanceName: inst.name,
+      extraClaudeArgs,
     });
     if (!result.success) {
       setInstanceStatus(
@@ -255,6 +286,7 @@ export async function spawnInstance(instanceId: number, d?: Db): Promise<SpawnRe
       projectPath: project.path_on_host,
       sessionName: inst.tmux_session,
       instanceName: inst.name,
+      extraClaudeArgs,
     });
     const res = await execOnce(conn, cmd, { timeoutMs: 15_000 });
     if (res.code !== 0) {
